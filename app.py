@@ -3101,32 +3101,40 @@ def register():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    # Jika sudah login, redirect ke dashboard
+    # Kalau sudah login, langsung lempar ke dashboard
     if current_user():
         return redirect(url_for('dashboard'))
-    
+
+    username_value = ""  # supaya bisa diisi ulang ke form kalau gagal
+    error_message = None
+
     if request.method == 'POST':
         try:
-            username = request.form['username']
-            password = request.form['password'].encode('utf-8')
-            
+            username_value = (request.form.get('username') or "").strip()
+            password = (request.form.get('password') or "").encode('utf-8')
+
             db = get_db()
-            cur = db.execute('SELECT id, password_hash FROM users WHERE username = ?', (username,))
+            cur = db.execute(
+                'SELECT id, password_hash FROM users WHERE username = ?',
+                (username_value,)
+            )
             user = cur.fetchone()
-            
+
             if user and bcrypt.checkpw(password, user['password_hash']):
                 session['user_id'] = user['id']
                 flash('Selamat datang di Sistem Akuntansi Tiramine!')
-                print(f"✅ User {username} logged in successfully")
+                print(f"✅ User {username_value} logged in successfully")
                 return redirect(url_for('dashboard'))
             else:
-                flash('Kredensial tidak valid. Silakan coba lagi.')
-                print(f"❌ Login failed for user: {username}")
-                
+                error_message = 'Kredensial tidak valid. Silakan coba lagi.'
+                flash(error_message)
+                print(f"❌ Login failed for user: {username_value}")
+
         except Exception as e:
-            flash(f'Error saat login: {str(e)}')
+            error_message = f'Error saat login: {str(e)}'
+            flash(error_message)
             print(f"❌ Login error: {e}")
-    
+
     # Tampilkan form login
     body = f"""
     <div class="container">
@@ -3134,66 +3142,64 @@ def login():
             <div class="col-md-6 col-lg-5">
                 <div class="card">
                     <div class="card-body p-5">
-    
+
                         <div class="text-center mb-4">
-                            <i class="fas fa-user-plus fa-3x text-primary mb-3"></i>
-                            <h3 class="fw-bold">Daftar Tiramine</h3>
-                            <p class="text-muted">Buat akun untuk mengakses sistem</p>
+                            <i class="fas fa-sign-in-alt fa-3x text-primary mb-3"></i>
+                            <h3 class="fw-bold">Masuk ke Tiramine</h3>
+                            <p class="text-muted">Gunakan akun yang sudah terdaftar</p>
                         </div>
-    
-                        <!-- Tambahkan autocomplete="off" -->
+
                         <form method="post" autocomplete="off">
-    
-                            <!-- Dummy field untuk mengelabui Chrome -->
+
+                            <!-- Dummy field untuk mengelabui autofill browser -->
                             <input type="text" style="display:none">
                             <input type="password" style="display:none">
-    
+
                             <div class="mb-3">
                                 <label class="form-label fw-semibold">Nama Pengguna</label>
-                                <input type="text" class="form-control" 
-                                       name="username" value="{escape(username_value)}"
+                                <input type="text" class="form-control"
+                                       name="username"
+                                       value="{escape(username_value)}"
                                        autocomplete="off" required>
                             </div>
-    
-                            <div class="mb-3">
-                                <label class="form-label fw-semibold">Email</label>
-                                <input type="email" class="form-control" 
-                                       name="email" value="{escape(email_value)}"
-                                       autocomplete="off" required>
-                            </div>
-    
+
                             <div class="mb-3">
                                 <label class="form-label fw-semibold">Kata Sandi</label>
-                                <input type="password" class="form-control" 
-                                       name="password" 
-                                       autocomplete="new-password" required>
-                            </div>
-    
-                            <div class="mb-4">
-                                <label class="form-label fw-semibold">Konfirmasi Kata Sandi</label>
                                 <input type="password" class="form-control"
-                                       name="confirm_password" 
-                                       autocomplete="new-password" required>
+                                       name="password"
+                                       autocomplete="current-password" required>
                             </div>
-    
-                            <button type="submit" class="btn btn-success w-100 py-2 fw-semibold">
-                                <i class="fas fa-user-check me-2"></i>Buat Akun
+
+                            <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold mb-3">
+                                <i class="fas fa-sign-in-alt me-2"></i>Masuk
                             </button>
                         </form>
-    
-                        <div class="text-center mt-4">
-                            <a href="/login" class="text-decoration-none d-block">
-                                Sudah punya akun? Masuk
+
+                        <div class="text-center mt-3">
+                            <a href="{{{{ url_for('login_google') }}}}" class="btn btn-danger w-100 mb-2">
+                                Login dengan Google
+                            </a>
+                            <a href="/otp/request" class="text-decoration-none d-block mb-2">
+                                <i class="fas fa-sms me-1"></i>Masuk menggunakan OTP
+                            </a>
+                            <a href="/register" class="text-decoration-none">
+                                <i class="fas fa-user-plus me-1"></i>Buat akun baru
                             </a>
                         </div>
-    
+
                     </div>
                 </div>
             </div>
         </div>
     </div>
     """
-    return render_template_string(BASE_TEMPLATE, title='Masuk', body=body, user=None)
+
+    return render_template_string(
+        BASE_TEMPLATE,
+        title='Masuk',
+        body=body,
+        user=None
+    )
 
 
 @app.route('/otp/request', methods=['GET', 'POST'])
@@ -7401,6 +7407,7 @@ def verify_balances():
     """
     
     return render_template_string(BASE_TEMPLATE, title='Verifikasi Saldo', body=body, user=current_user())
+
 
 
 
