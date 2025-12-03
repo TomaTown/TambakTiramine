@@ -5,4 +5,3 @@ XlsxWriter
 psycopg2-binary
 python-dotenv
 gunicorn
-Authlib==1.3.1
