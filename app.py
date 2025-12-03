@@ -7498,15 +7498,3 @@ def verify_balances():
     """
     
     return render_template_string(BASE_TEMPLATE, title='Verifikasi Saldo', body=body, user=current_user())
-
-# ---------- Startup Aplikasi ----------
-
-if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))
-    app.run(
-        host='0.0.0.0',
-        port=port,
-        debug=False,
-        use_reloader=False,
-        threaded=False
-    )
