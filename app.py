@@ -3128,46 +3128,65 @@ def login():
             print(f"❌ Login error: {e}")
     
     # Tampilkan form login
-    body = """
+    body = f"""
     <div class="container">
         <div class="row justify-content-center align-items-center min-vh-100">
-            <div class="col-md-5">
+            <div class="col-md-6 col-lg-5">
                 <div class="card">
                     <div class="card-body p-5">
+    
                         <div class="text-center mb-4">
-                            <i class="fas fa-water fa-3x text-primary mb-3"></i>
-                            <h3 class="fw-bold">Masuk ke Tiramine</h3>
-                            <p class="text-muted">Sistem Akuntansi Peternakan Tiram</p>
+                            <i class="fas fa-user-plus fa-3x text-primary mb-3"></i>
+                            <h3 class="fw-bold">Daftar Tiramine</h3>
+                            <p class="text-muted">Buat akun untuk mengakses sistem</p>
                         </div>
-                        
-                        <form method="post">
+    
+                        <!-- Tambahkan autocomplete="off" -->
+                        <form method="post" autocomplete="off">
+    
+                            <!-- Dummy field untuk mengelabui Chrome -->
+                            <input type="text" style="display:none">
+                            <input type="password" style="display:none">
+    
                             <div class="mb-3">
                                 <label class="form-label fw-semibold">Nama Pengguna</label>
-                                <input type="text" class="form-control" name="username" value="admin" required>
+                                <input type="text" class="form-control" 
+                                       name="username" value="{escape(username_value)}"
+                                       autocomplete="off" required>
                             </div>
-                            <div class="mb-4">
+    
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">Email</label>
+                                <input type="email" class="form-control" 
+                                       name="email" value="{escape(email_value)}"
+                                       autocomplete="off" required>
+                            </div>
+    
+                            <div class="mb-3">
                                 <label class="form-label fw-semibold">Kata Sandi</label>
-                                <input type="password" class="form-control" name="password" value="password" required>
+                                <input type="password" class="form-control" 
+                                       name="password" 
+                                       autocomplete="new-password" required>
                             </div>
-                            <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold">
-                                <i class="fas fa-sign-in-alt me-2"></i>Masuk
+    
+                            <div class="mb-4">
+                                <label class="form-label fw-semibold">Konfirmasi Kata Sandi</label>
+                                <input type="password" class="form-control"
+                                       name="confirm_password" 
+                                       autocomplete="new-password" required>
+                            </div>
+    
+                            <button type="submit" class="btn btn-success w-100 py-2 fw-semibold">
+                                <i class="fas fa-user-check me-2"></i>Buat Akun
                             </button>
                         </form>
+    
                         <div class="text-center mt-4">
-                            <a href="/otp/request" class="text-decoration-none d-block mb-2">
-                                <i class="fas fa-sms me-1"></i>Masuk menggunakan OTP
-                            </a>
-                            <a href="/register" class="text-decoration-none">
-                                <i class="fas fa-user-plus me-1"></i>Buat akun baru
+                            <a href="/login" class="text-decoration-none d-block">
+                                Sudah punya akun? Masuk
                             </a>
                         </div>
-                        
-                        <div class="text-center mt-4">
-                            <small class="text-muted">
-                                <i class="fas fa-info-circle me-1"></i>
-                                Gunakan: <strong>admin</strong> / <strong>password</strong>
-                            </small>
-                        </div>
+    
                     </div>
                 </div>
             </div>
@@ -7382,6 +7401,7 @@ def verify_balances():
     """
     
     return render_template_string(BASE_TEMPLATE, title='Verifikasi Saldo', body=body, user=current_user())
+
 
 
 
