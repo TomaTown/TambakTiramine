@@ -38,10 +38,18 @@ app.config['SECRET_KEY'] = SECRET_KEY
 def get_db():
     db = getattr(g, '_db', None)
     if db is None:
-        db = g._db = sqlite3.connect(str(DB_PATH))
-        db.row_factory = sqlite3.Row
-        # Tambah ini untuk auto-commit yang lebih baik:
+        db = g._db = sqlite3.connect(str(DB_PATH), timeout=20)  # Timeout lebih lama
+        
+        # Enable Write-Ahead Logging untuk concurrency yang lebih baik
         db.execute('PRAGMA journal_mode=WAL')
+        
+        # Auto-save lebih agresif
+        db.execute('PRAGMA synchronous=NORMAL')  # Lebih cepat dari FULL
+        db.execute('PRAGMA cache_size=10000')    # Cache lebih besar
+        db.execute('PRAGMA temp_store=MEMORY')   # Temp store di memory
+        db.execute('PRAGMA busy_timeout=5000')   # Timeout 5 detik
+        
+        db.row_factory = sqlite3.Row
     return db
 
 def init_db():
@@ -7311,6 +7319,7 @@ def verify_balances():
     """
     
     return render_template_string(BASE_TEMPLATE, title='Verifikasi Saldo', body=body, user=current_user())
+
 
 
 
