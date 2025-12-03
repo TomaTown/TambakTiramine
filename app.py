@@ -3251,7 +3251,6 @@ def logout():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    clear_all_caches()
     # Dapatkan info perusahaan
     company_info = get_company_info()
     current_stock = get_current_stock()  # Sekarang return dictionary
@@ -7326,6 +7325,7 @@ def verify_balances():
     """
     
     return render_template_string(BASE_TEMPLATE, title='Verifikasi Saldo', body=body, user=current_user())
+
 
 
 
