@@ -23,6 +23,8 @@ import signal
 import sys
 
 
+
+
 # Load environment variables from .env
 load_dotenv()
 
@@ -7534,7 +7536,6 @@ def verify_balances():
 # ---------- Startup Aplikasi ----------
 
 if __name__ == '__main__':
-
     with app.app_context():
         if not DB_PATH.exists():
             print("Menginisialisasi Database Akuntansi Tiramine...")
@@ -7542,6 +7543,13 @@ if __name__ == '__main__':
         print("Database berhasil diinisialisasi!")
         print("Transaksi contoh dibuat untuk demonstrasi")
         print("Masuk dengan: admin / password")
-        print("🔒 Auto-save enabled: Data aman meskipun CTRL+C")  # Bisa tambah ini juga
-    
-    app.run(debug=True, use_reloader=True, threaded=False, host='0.0.0.0', port=5000)
+        print("🔒 Auto-save enabled: Data aman meskipun CTRL+C")
+
+    port = int(os.environ.get("PORT", 5000))  # ambil PORT dari Railway
+    app.run(
+        host="0.0.0.0",
+        port=port,
+        debug=False,        # matikan debug di production
+        use_reloader=False, # reloader ga perlu di Railway
+        threaded=False
+    )
