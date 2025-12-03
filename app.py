@@ -50,30 +50,6 @@ def get_db():
         db.execute('PRAGMA journal_mode=WAL')
     return db
 
-@app.teardown_appcontext
-def close_db(exception):
-    """Enhanced database close with guaranteed commit"""
-    db = getattr(g, '_db', None)
-    if db is not None:
-        try:
-            # Always try to commit before closing
-            print("💾 Committing changes before closing database...")
-            db.commit()
-            print("✅ Changes committed successfully")
-        except Exception as commit_error:
-            print(f"❌ Commit error on close: {commit_error}")
-            try:
-                db.rollback()
-                print("🔄 Rolled back due to commit error")
-            except:
-                pass
-        finally:
-            try:
-                db.close()
-                print("🔒 Database connection closed")
-            except:
-                pass
-
 def init_db():
     """Initialize database with proper context management"""
     print("🚀 Starting database initialization...")
@@ -7420,5 +7396,6 @@ def verify_balances():
     """
     
     return render_template_string(BASE_TEMPLATE, title='Verifikasi Saldo', body=body, user=current_user())
+
 
 
