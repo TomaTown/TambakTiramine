@@ -3599,14 +3599,14 @@ def dashboard():
                                 <div class="border rounded p-3">
                                     <h4 class="text-primary">{current_stock.get('large', 0)}</h4>
                                     <p class="mb-0 text-muted">Tiram Besar (kg)</p>
-                                    <small class="text-primary">Rp 800/kg</small>
+                                    <small class="text-primary">Rp 55.000/kg</small>
                                 </div>
                             </div>
                             <div class="col-md-4 text-center">
                                 <div class="border rounded p-3">
                                     <h4 class="text-success">{current_stock.get('small', 0)}</h4>
                                     <p class="mb-0 text-muted">Tiram Kecil (kg)</p>
-                                    <small class="text-success">Rp 500/kg</small>
+                                    <small class="text-success">Rp 55.000/kg</small>
                                 </div>
                             </div>
                             <div class="col-md-4 text-center">
@@ -3659,7 +3659,7 @@ def inventory_monitoring():
                     <h6 class="text-dark">Tiram Besar</h6>
                     <small class="text-muted">Stok tersedia</small>
                     <div class="mt-2">
-                        <span class="badge bg-primary">Rp 800/tiram</span>
+                        <span class="badge bg-primary">Rp 55.000/tiram</span>
                     </div>
                 </div>
             </div>
@@ -3676,7 +3676,7 @@ def inventory_monitoring():
                     <h6 class="text-dark">Tiram Kecil</h6>
                     <small class="text-muted">Stok tersedia</small>
                     <div class="mt-2">
-                        <span class="badge bg-success">Rp 500/tiram</span>
+                        <span class="badge bg-success">Rp 30.000/tiram</span>
                     </div>
                 </div>
             </div>
@@ -7407,6 +7407,7 @@ def verify_balances():
     """
     
     return render_template_string(BASE_TEMPLATE, title='Verifikasi Saldo', body=body, user=current_user())
+
 
 
 
