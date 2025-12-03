@@ -7539,19 +7539,12 @@ def verify_balances():
 if __name__ == '__main__':
     with app.app_context():
         if not DB_PATH.exists():
-            print("Menginisialisasi Database Akuntansi Tiramine...")
-        init_db()
-        print("Database berhasil diinisialisasi!")
-        print("Transaksi contoh dibuat untuk demonstrasi")
-        print("Masuk dengan: admin / password")
-        print("🔒 Auto-save enabled: Data aman meskipun CTRL+C")
+            init_db()
 
-    # pakai PORT dari Railway, bukan 5000 fix
     port = int(os.environ.get("PORT", 5000))
     app.run(
         host='0.0.0.0',
         port=port,
-        debug=False,        # debug matiin di production
-        use_reloader=False, # reloader ga perlu di Railway
-        threaded=False
+        debug=False,
+        use_reloader=False
     )
