@@ -39,84 +39,6 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-secret-tiramine')
 app = Flask(__name__)
 app.config['SECRET_KEY'] = SECRET_KEY
 
-
-# ---------- ENHANCED AUTO-SAVE SYSTEM ----------
-
-class AutoSaveManager:
-    def __init__(self):
-        self.last_save = datetime.now()
-        self.save_interval = 30  # Save every 30 seconds
-        self.force_save_flag = False
-    
-    def should_save(self):
-        """Check if it's time to auto-save"""
-        now = datetime.now()
-        time_diff = (now - self.last_save).total_seconds()
-        return time_diff >= self.save_interval or self.force_save_flag
-    
-    def mark_saved(self):
-        """Mark that save has been performed"""
-        self.last_save = datetime.now()
-        self.force_save_flag = False
-    
-    def force_save(self):
-        """Force immediate save on next check"""
-        self.force_save_flag = True
-
-# Global auto-save manager
-auto_save_manager = AutoSaveManager()
-
-def enhanced_force_save():
-    """Enhanced save function with better error handling"""
-    print("\n💾 Auto-saving data...")
-    try:
-        # Use application context to get database
-        with app.app_context():
-            db = get_db()
-            # Commit any pending transactions
-            db.commit()
-            print("✅ All data saved successfully!")
-            auto_save_manager.mark_saved()
-            return True
-    except Exception as e:
-        print(f"❌ Save error: {e}")
-        # Try to rollback and save again
-        try:
-            with app.app_context():
-                db = get_db()
-                db.rollback()
-                db.commit()
-                print("✅ Data saved after rollback!")
-                auto_save_manager.mark_saved()
-                return True
-        except Exception as e2:
-            print(f"❌ Critical save error: {e2}")
-            return False
-        
-def enhanced_handle_shutdown(signum, frame):
-    """Enhanced shutdown handler"""
-    print("\n🔄 Shutting down gracefully...")
-    enhanced_force_save()
-    print("👋 Goodbye!")
-    sys.exit(0)
-
-def periodic_auto_save():
-    """Periodic auto-save function"""
-    if auto_save_manager.should_save():
-        enhanced_force_save()
-
-# Register enhanced handlers (ganti yang lama)
-atexit.register(enhanced_force_save)
-signal.signal(signal.SIGINT, enhanced_handle_shutdown)
-
-# Auto-save before each request
-@app.before_request
-def auto_save_before_request():
-    """Auto-save before each request if needed"""
-    # Only auto-save for non-static requests and when we have a user session
-    if request.endpoint and 'static' not in request.endpoint and current_user():
-        periodic_auto_save()
-
 # ---------- Helper Database ----------
 
 def get_db():
@@ -7498,4 +7420,5 @@ def verify_balances():
     """
     
     return render_template_string(BASE_TEMPLATE, title='Verifikasi Saldo', body=body, user=current_user())
+
 
