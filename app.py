@@ -23,56 +23,22 @@ import signal
 import sys
 
 
-
-
 # Load environment variables from .env
 load_dotenv()
 
-# Fetch variables
-USER = os.getenv("user")
-PASSWORD = os.getenv("password")
-HOST = os.getenv("host")
-PORT = os.getenv("port")
-DBNAME = os.getenv("dbname")
-
-# Connect to the database
-try:
-    connection = psycopg2.connect(
-        user=USER,
-        password=PASSWORD,
-        host=HOST,
-        port=PORT,
-        dbname=DBNAME
-    )
-    print("Connection successful!")
-    
-    # Create a cursor to execute SQL queries
-    cursor = connection.cursor()
-    
-    # Example query
-    cursor.execute("SELECT NOW();")
-    result = cursor.fetchone()
-    print("Current Time:", result)
-
-    # Close the cursor and connection
-    cursor.close()
-    connection.close()
-    print("Connection closed.")
-
-except Exception as e:
-    print(f"Failed to connect: {e}")
-
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    load_dotenv = None
+# Fetch variables (HARUS kapital)
+USER = os.getenv("USER")
+PASSWORD = os.getenv("PASSWORD")
+HOST = os.getenv("HOST")
+PORT = os.getenv("PORT")
+DBNAME = os.getenv("DBNAME")
 
 DB_PATH = Path(__file__).parent / 'tiramine.db'
 SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-secret-tiramine')
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = SECRET_KEY
+
 
 # ---------- ENHANCED AUTO-SAVE SYSTEM ----------
 
@@ -7548,3 +7514,4 @@ if __name__ == '__main__':
         debug=False,
         use_reloader=False
     )
+
