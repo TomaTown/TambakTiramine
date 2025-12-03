@@ -1140,61 +1140,80 @@ def income_statement(include_adjustments=True):
     }
 
 def balance_sheet(include_adjustments=True):
-    """Neraca yang sudah memasukkan saldo awal (opening_balances)."""
+    """Hasilkan neraca - VERSI YANG DIPERBAIKI"""
     db = get_db()
-
-    # Ambil semua akun
-    accounts = db.execute("""
-        SELECT id, code, name, acct_type, normal_balance
-        FROM accounts
-        ORDER BY code
-    """).fetchall()
-
-    total_assets = 0
-    total_liabilities = 0
-    total_equity = 0
-
-    result = {
-        "assets": [],
-        "liabilities": [],
-        "equity": [],
-        "total_assets": 0,
-        "total_liabilities": 0,
-        "total_equity": 0,
-        "net_income": 0,
-    }
-
-    # Hitung saldo per akun (sudah termasuk opening + jurnal + penyesuaian)
-    for acc in accounts:
-        saldo = get_account_balance(acc["id"], include_adjustments=include_adjustments)
-
-        # Kalau mau, saldo 0 bisa di-skip, tapi ini opsional
-        # if abs(saldo) < 0.005:
-        #     continue
-
-        if acc["acct_type"] in ("Asset", "Contra Asset"):
-            result["assets"].append((acc["code"], acc["name"], saldo))
-            total_assets += saldo
-
-        elif acc["acct_type"] == "Liability":
-            result["liabilities"].append((acc["code"], acc["name"], saldo))
-            total_liabilities += saldo
-
-        elif acc["acct_type"] == "Equity":
-            result["equity"].append((acc["code"], acc["name"], saldo))
-            total_equity += saldo
-
-    # Tambahkan laba bersih ke ekuitas (sama seperti versi lama kamu)
+    cur = db.cursor()
+    
+    # Aset (seri 100)
+    cur.execute('''
+        SELECT COALESCE(SUM(jl.debit), 0) - COALESCE(SUM(jl.credit), 0) as journal_balance
+        FROM journal_lines jl
+        JOIN accounts a ON jl.account_id = a.id
+        WHERE a.code LIKE '1%'
+    ''')
+    assets_journal = cur.fetchone()['journal_balance']
+    
+    cur.execute('''
+        SELECT COALESCE(SUM(al.debit), 0) - COALESCE(SUM(al.credit), 0) as adjusting_balance
+        FROM adjusting_lines al
+        JOIN accounts a ON al.account_id = a.id
+        WHERE a.code LIKE '1%'
+    ''')
+    assets_adjusting = cur.fetchone()['adjusting_balance'] if include_adjustments else 0
+    
+    total_assets = assets_journal + assets_adjusting
+    
+    # Kewajiban (seri 200)
+    cur.execute('''
+        SELECT COALESCE(SUM(jl.credit), 0) - COALESCE(SUM(jl.debit), 0) as journal_balance
+        FROM journal_lines jl
+        JOIN accounts a ON jl.account_id = a.id
+        WHERE a.code LIKE '2%'
+    ''')
+    liabilities_journal = cur.fetchone()['journal_balance']
+    
+    cur.execute('''
+        SELECT COALESCE(SUM(al.credit), 0) - COALESCE(SUM(al.debit), 0) as adjusting_balance
+        FROM adjusting_lines al
+        JOIN accounts a ON al.account_id = a.id
+        WHERE a.code LIKE '2%'
+    ''')
+    liabilities_adjusting = cur.fetchone()['adjusting_balance'] if include_adjustments else 0
+    
+    total_liabilities = liabilities_journal + liabilities_adjusting
+    
+    # Ekuitas (seri 300)
+    cur.execute('''
+        SELECT COALESCE(SUM(jl.credit), 0) - COALESCE(SUM(jl.debit), 0) as journal_balance
+        FROM journal_lines jl
+        JOIN accounts a ON jl.account_id = a.id
+        WHERE a.code LIKE '3%'
+    ''')
+    equity_journal = cur.fetchone()['journal_balance']
+    
+    cur.execute('''
+        SELECT COALESCE(SUM(al.credit), 0) - COALESCE(SUM(al.debit), 0) as adjusting_balance
+        FROM adjusting_lines al
+        JOIN accounts a ON al.account_id = a.id
+        WHERE a.code LIKE '3%'
+    ''')
+    equity_adjusting = cur.fetchone()['adjusting_balance'] if include_adjustments else 0
+    
+    total_equity = equity_journal + equity_adjusting
+    
+    # Tambahkan laba bersih ke ekuitas
     inc_stmt = income_statement(include_adjustments)
-    net_income = inc_stmt.get("net_income", 0)
-    total_equity_with_income = total_equity + net_income
-
-    result["total_assets"] = total_assets
-    result["total_liabilities"] = total_liilities
-    result["total_equity"] = total_equity_with_income
-    result["net_income"] = net_income
-
-    return result
+    total_equity += inc_stmt['net_income']
+    
+    return {
+        'assets': [],
+        'liabilities': [],
+        'equity': [],
+        'total_assets': total_assets,
+        'total_liabilities': total_liabilities,
+        'total_equity': total_equity,
+        'net_income': inc_stmt['net_income']
+    }
 
 
 def cash_flow_statement():
@@ -7280,6 +7299,7 @@ def verify_balances():
     """
     
     return render_template_string(BASE_TEMPLATE, title='Verifikasi Saldo', body=body, user=current_user())
+
 
 
 
