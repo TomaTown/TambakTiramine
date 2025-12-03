@@ -288,14 +288,6 @@ def init_db():
             print(f"📊 TOTAL CREDIT: {total_credit:,}")
             print(f"📊 BALANCED: {total_debit == total_credit}")
             
-            # BUAT USER ADMIN
-            password_hash = bcrypt.hashpw(b'password', bcrypt.gensalt())
-            cur.execute(
-                'INSERT INTO users (username, password_hash, email) VALUES (?, ?, ?)',
-                ('admin', password_hash, 'tiramine@gmail.com')
-            )
-            print("✅ User admin created: admin / password / tiramine@gmail.com")
-            
             # Insert sample inventory data
             cur.execute('''
                 INSERT INTO inventory (date, description, quantity_in, unit_cost, value)
@@ -7390,6 +7382,7 @@ def verify_balances():
     """
     
     return render_template_string(BASE_TEMPLATE, title='Verifikasi Saldo', body=body, user=current_user())
+
 
 
 
