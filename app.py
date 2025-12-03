@@ -21,6 +21,8 @@ import os
 import atexit
 import signal
 import sys
+from authlib.integrations.flask_client import OAuth
+
 
 
 # Load environment variables from .env
@@ -31,6 +33,22 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-secret-tiramine')
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = SECRET_KEY
+
+# ---------- Google OAuth ----------
+oauth = OAuth(app)
+
+google = oauth.register(
+    name='google',
+    client_id=os.getenv('GOOGLE_CLIENT_ID'),
+    client_secret=os.getenv('GOOGLE_CLIENT_SECRET'),
+    access_token_url='https://oauth2.googleapis.com/token',
+    authorize_url='https://accounts.google.com/o/oauth2/v2/auth',
+    api_base_url='https://www.googleapis.com/oauth2/v2/',
+    client_kwargs={
+        'scope': 'openid email profile'
+    },
+)
+
 
 # ---------- Helper Database ----------
 
@@ -3162,6 +3180,9 @@ def login():
                         </form>
 
                         <div class="text-center mt-4">
+                            <a href="{{ url_for('login_google') }}" class="btn btn-danger">
+                              Login dengan Google
+                            </a>
                             <a href="/otp/request" class="text-decoration-none d-block mb-2">
                                 <i class="fas fa-sms me-1"></i>Masuk menggunakan OTP
                             </a>
@@ -3183,6 +3204,72 @@ def login():
     </div>
     """
     return render_template_string(BASE_TEMPLATE, title='Masuk', body=body, user=None)
+
+@app.route('/login/google')
+def login_google():
+    # Di production pakai https, cocok dengan redirect URI di Google Cloud
+    redirect_uri = url_for('google_callback', _external=True, _scheme='https')
+    return google.authorize_redirect(redirect_uri)
+
+@app.route('/auth/google/callback')
+def google_callback():
+    # Tukar "code" dari Google jadi access token
+    token = google.authorize_access_token()
+
+    # Ambil data user dari Google
+    resp = google.get('userinfo')  # kadang endpoint ini
+    if resp is None:
+        resp = google.get('oauth2/v2/userinfo')  # fallback
+    user_info = resp.json()
+
+    email = user_info.get('email')
+    name = user_info.get('name') or email
+
+    if not email:
+        flash('Gagal mendapatkan email dari Google.', 'danger')
+        return redirect(url_for('login'))
+
+    db = get_db()
+    cur = db.cursor()
+
+    # ⬇️ Di sini kita anggap username = email
+    cur.execute("SELECT id, username FROM users WHERE username = ?", (email,))
+    row = cur.fetchone()
+
+    if row is None:
+        # User baru → masukin ke tabel users
+        # Kalau di tabel kamu cuma ada kolom (id, username) ini aman.
+        # Kalau ada kolom lain (email, role, password, dll) bisa ditambah di sini.
+        cur.execute(
+            "INSERT INTO users (username) VALUES (?)",
+            (email,)
+        )
+        db.commit()
+        user_id = cur.lastrowid
+        username = email
+        print(f"[GOOGLE LOGIN] Created new user with id={user_id}, username={username}")
+    else:
+        # Sudah ada user dengan username = email
+        # row bisa sqlite3.Row atau tuple
+        if isinstance(row, sqlite3.Row):
+            user_id = row['id']
+            username = row['username']
+        else:
+            user_id = row[0]
+            username = row[1]
+        print(f"[GOOGLE LOGIN] Existing user id={user_id}, username={username}")
+
+    # Set session supaya current_user() kamu bisa jalan
+    session['user_id'] = user_id
+
+    # Kalau mau, simpan juga info tambahan
+    session['user_email'] = email
+    session['user_name'] = name
+
+    flash(f'Login berhasil sebagai {email} (Google)', 'success')
+    # ganti 'dashboard' sesuai nama view setelah login di app kamu
+    return redirect(url_for('dashboard'))
+
 
 @app.route('/otp/request', methods=['GET', 'POST'])
 def request_otp():
@@ -7389,6 +7476,7 @@ def verify_balances():
     """
     
     return render_template_string(BASE_TEMPLATE, title='Verifikasi Saldo', body=body, user=current_user())
+
 
 
 
