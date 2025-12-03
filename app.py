@@ -1178,7 +1178,7 @@ def balance_sheet(include_adjustments=True):
 
         elif acc["acct_type"] == "Liability":
             result["liabilities"].append((acc["code"], acc["name"], saldo))
-            total_liilities += saldo
+            total_liabilities += saldo
 
         elif acc["acct_type"] == "Equity":
             result["equity"].append((acc["code"], acc["name"], saldo))
@@ -7280,6 +7280,7 @@ def verify_balances():
     """
     
     return render_template_string(BASE_TEMPLATE, title='Verifikasi Saldo', body=body, user=current_user())
+
 
 
 
