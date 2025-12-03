@@ -7535,6 +7535,7 @@ def verify_balances():
 
 # ---------- Startup Aplikasi ----------
 
+
 if __name__ == '__main__':
     with app.app_context():
         if not DB_PATH.exists():
@@ -7545,11 +7546,12 @@ if __name__ == '__main__':
         print("Masuk dengan: admin / password")
         print("🔒 Auto-save enabled: Data aman meskipun CTRL+C")
 
-    port = int(os.environ.get("PORT", 5000))  # ambil PORT dari Railway
+    # pakai PORT dari Railway, bukan 5000 fix
+    port = int(os.environ.get("PORT", 5000))
     app.run(
-        host="0.0.0.0",
+        host='0.0.0.0',
         port=port,
-        debug=False,        # matikan debug di production
+        debug=False,        # debug matiin di production
         use_reloader=False, # reloader ga perlu di Railway
         threaded=False
     )
