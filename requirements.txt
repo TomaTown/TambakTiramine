@@ -1,0 +1,6 @@
+Flask
+bcrypt
+pandas
+XlsxWriter
+psycopg2-binary
+python-dotenv
