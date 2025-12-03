@@ -3606,7 +3606,7 @@ def dashboard():
                                 <div class="border rounded p-3">
                                     <h4 class="text-success">{current_stock.get('small', 0)}</h4>
                                     <p class="mb-0 text-muted">Tiram Kecil (kg)</p>
-                                    <small class="text-success">Rp 55.000/kg</small>
+                                    <small class="text-success">Rp 30.000/kg</small>
                                 </div>
                             </div>
                             <div class="col-md-4 text-center">
@@ -7407,6 +7407,7 @@ def verify_balances():
     """
     
     return render_template_string(BASE_TEMPLATE, title='Verifikasi Saldo', body=body, user=current_user())
+
 
 
 
