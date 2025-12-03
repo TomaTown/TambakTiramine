@@ -26,13 +26,6 @@ import sys
 # Load environment variables from .env
 load_dotenv()
 
-# Fetch variables (HARUS kapital)
-USER = os.getenv("USER")
-PASSWORD = os.getenv("PASSWORD")
-HOST = os.getenv("HOST")
-PORT = os.getenv("PORT")
-DBNAME = os.getenv("DBNAME")
-
 DB_PATH = Path(__file__).parent / 'tiramine.db'
 SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-secret-tiramine')
 
@@ -7396,6 +7389,7 @@ def verify_balances():
     """
     
     return render_template_string(BASE_TEMPLATE, title='Verifikasi Saldo', body=body, user=current_user())
+
 
 
 
