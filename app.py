@@ -297,102 +297,6 @@ def init_db():
             ''')
             print("✅ Sample inventory data created!")
             
-            # Buat tabel transaction_templates
-            cur.execute('''
-                CREATE TABLE IF NOT EXISTS transaction_templates (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    template_key TEXT UNIQUE NOT NULL,
-                    label TEXT NOT NULL,
-                    description TEXT,
-                    lines_json TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-            
-            # Insert default templates berdasarkan contoh transaksi
-            templates = [
-                {
-                    'template_key': 'penjualan_tunai_besar',
-                    'label': 'Penjualan Tunai (Tiram Besar)',
-                    'description': 'Penjualan tiram besar secara tunai',
-                    'lines_json': json.dumps([
-                        {"account_code": "101", "side": "debit", "editable": False, "description": "Kas", "auto_calculate": False},
-                        {"account_code": "401", "side": "credit", "editable": False, "description": "Penjualan - Tiram Besar", "auto_calculate": False}
-                    ])
-                },
-                {
-                    'template_key': 'penjualan_tunai_kecil', 
-                    'label': 'Penjualan Tunai (Tiram Kecil)',
-                    'description': 'Penjualan tiram kecil secara tunai',
-                    'lines_json': json.dumps([
-                        {"account_code": "101", "side": "debit", "editable": False, "description": "Kas", "auto_calculate": False},
-                        {"account_code": "402", "side": "credit", "editable": False, "description": "Penjualan - Tiram Kecil", "auto_calculate": False}
-                    ])
-                },
-                {
-                    'template_key': 'penjualan_kredit_besar',
-                    'label': 'Penjualan Kredit (Tiram Besar)',
-                    'description': 'Penjualan tiram besar secara kredit',
-                    'lines_json': json.dumps([
-                        {"account_code": "102", "side": "debit", "editable": False, "description": "Piutang Usaha", "auto_calculate": False},
-                        {"account_code": "401", "side": "credit", "editable": False, "description": "Penjualan - Tiram Besar", "auto_calculate": False}
-                    ])
-                },
-                {
-                    'template_key': 'pembayaran_gaji',
-                    'label': 'Pembayaran Gaji Karyawan',
-                    'description': 'Pembayaran gaji dan upah karyawan',
-                    'lines_json': json.dumps([
-                        {"account_code": "503", "side": "debit", "editable": False, "description": "Beban Gaji", "auto_calculate": False},
-                        {"account_code": "101", "side": "credit", "editable": False, "description": "Kas", "auto_calculate": False}
-                    ])
-                },
-                {
-                    'template_key': 'pembelian_peralatan',
-                    'label': 'Pembelian Peralatan',
-                    'description': 'Pembelian peralatan tambak secara tunai',
-                    'lines_json': json.dumps([
-                        {"account_code": "103", "side": "debit", "editable": False, "description": "Peralatan Tambak", "auto_calculate": False},
-                        {"account_code": "101", "side": "credit", "editable": False, "description": "Kas", "auto_calculate": False}
-                    ])
-                },
-                {
-                    'template_key': 'pelunasan_piutang',
-                    'label': 'Pelunasan Piutang',
-                    'description': 'Penerimaan pelunasan piutang usaha',
-                    'lines_json': json.dumps([
-                        {"account_code": "101", "side": "debit", "editable": False, "description": "Kas", "auto_calculate": False},
-                        {"account_code": "102", "side": "credit", "editable": False, "description": "Piutang Usaha", "auto_calculate": False}
-                    ])
-                },
-                {
-                    'template_key': 'pembayaran_utang',
-                    'label': 'Pembayaran Utang Usaha',
-                    'description': 'Pembayaran utang kepada supplier',
-                    'lines_json': json.dumps([
-                        {"account_code": "201", "side": "debit", "editable": False, "description": "Utang Usaha", "auto_calculate": False},
-                        {"account_code": "101", "side": "credit", "editable": False, "description": "Kas", "auto_calculate": False}
-                    ])
-                },
-                {
-                    'template_key': 'penyesuaian_persediaan',
-                    'label': 'Penyesuaian Persediaan',
-                    'description': 'Penyesuaian nilai persediaan tiram',
-                    'lines_json': json.dumps([
-                        {"account_code": "501", "side": "debit", "editable": True, "description": "HPP - Tiram Kecil", "auto_calculate": False},
-                        {"account_code": "502", "side": "debit", "editable": True, "description": "HPP - Tiram Besar", "auto_calculate": False},
-                        {"account_code": "105", "side": "credit", "editable": True, "description": "Persediaan - Tiram Kecil", "auto_calculate": False},
-                        {"account_code": "106", "side": "credit", "editable": True, "description": "Persediaan - Tiram Besar", "auto_calculate": False}
-                    ])
-                }
-            ]
-            
-            for template in templates:
-                cur.execute('''
-                    INSERT OR REPLACE INTO transaction_templates (template_key, label, description, lines_json)
-                    VALUES (?, ?, ?, ?)
-                ''', (template['template_key'], template['label'], template['description'], template['lines_json']))
-            
             db.commit()
             print("🎉 Database initialization completed successfully!")
             print("💡 Access /trial_balance to verify the opening balances")
@@ -7407,6 +7311,7 @@ def verify_balances():
     """
     
     return render_template_string(BASE_TEMPLATE, title='Verifikasi Saldo', body=body, user=current_user())
+
 
 
 
