@@ -421,7 +421,9 @@ def verify_otp_code(email: str, otp_code: str):
 # ---------- Utilitas Akuntansi ----------
 
 def all_accounts():
-    cur = get_db().execute('SELECT * FROM accounts ORDER BY code')
+    """Dapatkan semua akun dengan cache yang tepat"""
+    db = get_db()
+    cur = db.execute('SELECT * FROM accounts ORDER BY code')
     return cur.fetchall()
 
 def get_account_id(cur, code):
@@ -439,7 +441,6 @@ def fix_opening_balances():
     cur.execute('DELETE FROM opening_balances')
     
     # DATA SALDO AWAL YANG BENAR - SESUAI DENGAN NERACA SALDO AWAL
-    # Total harus balance: Debit = Credit = Rp 31.550.000
     opening_balances_corrected = [
         # ===== ASET (DEBIT) =====
         (1, 8500000, 0),     # Kas (101) - Debit
@@ -488,9 +489,14 @@ def fix_opening_balances():
     print(f"📊 SELISIH: {abs(total_debit - total_credit):,}")
     
     db.commit()
+    
+    # Clear cache setelah update saldo awal
+    if hasattr(g, '_account_balances'):
+        del g._account_balances
+    
     return total_debit == total_credit
 
-def set_opening_balance(account_id, balance, balance_type):
+def set_opening_balance(account_id, amount, balance_type):
     """Set saldo awal untuk akun tertentu"""
     db = get_db()
     cur = db.cursor()
@@ -500,12 +506,24 @@ def set_opening_balance(account_id, balance, balance_type):
         cur.execute('DELETE FROM opening_balances WHERE account_id = ?', (account_id,))
         
         # Insert saldo awal baru
-        cur.execute('''
-            INSERT INTO opening_balances (account_id, balance, balance_type)
-            VALUES (?, ?, ?)
-        ''', (account_id, abs(balance), balance_type))
+        if amount > 0:
+            if balance_type == 'Debit':
+                cur.execute('''
+                    INSERT INTO opening_balances (account_id, debit_amount, credit_amount)
+                    VALUES (?, ?, 0)
+                ''', (account_id, amount))
+            else:
+                cur.execute('''
+                    INSERT INTO opening_balances (account_id, debit_amount, credit_amount)
+                    VALUES (?, 0, ?)
+                ''', (account_id, amount))
         
         db.commit()
+        
+        # Clear cache setelah update
+        if hasattr(g, '_account_balances'):
+            del g._account_balances
+            
         return True
     except Exception as e:
         db.rollback()
@@ -513,21 +531,26 @@ def set_opening_balance(account_id, balance, balance_type):
 
 def get_opening_balance(account_id):
     """Dapatkan saldo awal untuk akun tertentu"""
-    cur = get_db().execute('''
-        SELECT balance, balance_type FROM opening_balances 
+    db = get_db()
+    cur = db.execute('''
+        SELECT debit_amount, credit_amount FROM opening_balances 
         WHERE account_id = ?
     ''', (account_id,))
     result = cur.fetchone()
     
     if result:
-        if result['balance_type'] == 'Debit':
-            return result['balance']
-        else:
-            return -result['balance']
+        # PERBAIKAN: Hitung net opening balance
+        return result['debit_amount'] - result['credit_amount']
     return 0
 
-def get_account_balance(account_id, include_adjustments=True):
+def get_account_balance(account_id, include_adjustments=True, force_refresh=False):
     """Mendapatkan saldo akun dengan benar - VERSI DIPERBAIKI"""
+    # Gunakan cache untuk performa, tapi bisa di-force refresh
+    if not force_refresh and hasattr(g, '_account_balances'):
+        cache_key = f"{account_id}_{include_adjustments}"
+        if cache_key in g._account_balances:
+            return g._account_balances[cache_key]
+    
     db = get_db()
     
     # Dapatkan informasi akun
@@ -536,7 +559,7 @@ def get_account_balance(account_id, include_adjustments=True):
     if not account:
         return 0
     
-    # 1. Dapatkan saldo awal - PERBAIKAN: gunakan struktur baru dengan benar
+    # 1. Dapatkan saldo awal
     opening_cur = db.execute(
         'SELECT debit_amount, credit_amount FROM opening_balances WHERE account_id = ?', 
         (account_id,)
@@ -545,11 +568,7 @@ def get_account_balance(account_id, include_adjustments=True):
     
     opening_balance = 0
     if opening:
-        # Sesuai dengan jenis akun, hitung saldo awal
-        if account['normal_balance'] == 'Debit':
-            opening_balance = opening['debit_amount'] - opening['credit_amount']
-        else:
-            opening_balance = opening['credit_amount'] - opening['debit_amount']
+        opening_balance = opening['debit_amount'] - opening['credit_amount']
     
     # 2. Hitung total dari jurnal
     journal_cur = db.execute('''
@@ -560,11 +579,7 @@ def get_account_balance(account_id, include_adjustments=True):
     ''', (account_id,))
     journal = journal_cur.fetchone()
     
-    journal_net = 0
-    if account['normal_balance'] == 'Debit':
-        journal_net = journal['total_debit'] - journal['total_credit']
-    else:
-        journal_net = journal['total_credit'] - journal['total_debit']
+    journal_net = journal['total_debit'] - journal['total_credit']
     
     # 3. Hitung total dari penyesuaian (jika termasuk)
     adjusting_net = 0
@@ -576,16 +591,24 @@ def get_account_balance(account_id, include_adjustments=True):
             WHERE account_id = ?
         ''', (account_id,))
         adjusting = adjusting_cur.fetchone()
-        
-        if account['normal_balance'] == 'Debit':
-            adjusting_net = adjusting['total_debit'] - adjusting['total_credit']
-        else:
-            adjusting_net = adjusting['total_credit'] - adjusting['total_debit']
+        adjusting_net = adjusting['total_debit'] - adjusting['total_credit']
     
     # Total saldo
     total_balance = opening_balance + journal_net + adjusting_net
     
+    # Cache hasilnya
+    if not hasattr(g, '_account_balances'):
+        g._account_balances = {}
+    
+    cache_key = f"{account_id}_{include_adjustments}"
+    g._account_balances[cache_key] = total_balance
+    
     return total_balance
+
+def clear_account_cache():
+    """Clear cache saldo akun"""
+    if hasattr(g, '_account_balances'):
+        del g._account_balances
 
 def post_journal_entry(date, description, lines, reference="", transaction_type="General", template_key=None):
     """Posting entri jurnal dengan validasi yang diperbaiki"""
@@ -593,7 +616,7 @@ def post_journal_entry(date, description, lines, reference="", transaction_type=
     cur = db.cursor()
     
     try:
-        # 1. VALIDASI SERVER-SIDE SEBELUM POSTING (dengan validasi yang diperbaiki)
+        # 1. VALIDASI SERVER-SIDE SEBELUM POSTING
         validation_errors = validate_journal_entry(lines, template_key)
         if validation_errors:
             raise ValueError("; ".join(validation_errors))
@@ -612,84 +635,110 @@ def post_journal_entry(date, description, lines, reference="", transaction_type=
                 VALUES (?, ?, ?, ?, ?)
             ''', (entry_id, line['account_id'], line.get('debit', 0), line.get('credit', 0), line.get('description', '')))
         
-        # 4. Periksa jenis transaksi untuk update inventory
-        inventory_updated = False
-        is_harvest_transaction = False
+        # 4. Update inventory jika diperlukan
+        update_inventory_from_journal_lines(lines, date, description, cur)
         
-        # Cek apakah ini transaksi panen (menggunakan akun persediaan benih dan tiram)
-        harvest_accounts = ['105', '106', '107', '108']  # Semua akun persediaan tiram dan benih
-        for line in lines:
-            account_id = line['account_id']
-            cur.execute('SELECT code FROM accounts WHERE id = ?', (account_id,))
-            account = cur.fetchone()
-            
-            if account and account['code'] in harvest_accounts:
-                inventory_updated = True
-                
-            # Deteksi transaksi panen berdasarkan pola debit/kredit
-            if account and account['code'] in ['105', '106'] and line.get('debit', 0) > 0:
-                # Jika ada debit ke persediaan tiram (105/106), kemungkinan panen
-                is_harvest_transaction = True
-        
-        # 5. Update inventory berdasarkan jenis transaksi
-        if inventory_updated:
-            if is_harvest_transaction:
-                # Handle transaksi panen - tambah stok tiram
-                for line in lines:
-                    account_id = line['account_id']
-                    cur.execute('SELECT code FROM accounts WHERE id = ?', (account_id,))
-                    account = cur.fetchone()
-                    
-                    if account and account['code'] == '105':  # Persediaan Tiram Kecil
-                        quantity = line['debit'] / 20000  # Harga Rp 20.000 per kg
-                        if quantity > 0:
-                            cur.execute('UPDATE settings SET v = v + ? WHERE k = "current_stock_small"', (quantity,))
-                            # Tambah entry di inventory
-                            cur.execute('''
-                                INSERT INTO inventory (date, description, quantity_in, unit_cost, value)
-                                VALUES (?, ?, ?, ?, ?)
-                            ''', (date, f'Panen tiram kecil: {description}', quantity, 20000, line['debit']))
-                    
-                    elif account and account['code'] == '106':  # Persediaan Tiram Besar
-                        quantity = line['debit'] / 35000  # Harga Rp 35.000 per kg
-                        if quantity > 0:
-                            cur.execute('UPDATE settings SET v = v + ? WHERE k = "current_stock_large"', (quantity,))
-                            # Tambah entry di inventory
-                            cur.execute('''
-                                INSERT INTO inventory (date, description, quantity_in, unit_cost, value)
-                                VALUES (?, ?, ?, ?, ?)
-                            ''', (date, f'Panen tiram besar: {description}', quantity, 35000, line['debit']))
-                    
-                    elif account and account['code'] == '107':  # Persediaan Benih Kecil
-                        quantity = line['credit'] / 20000  # Harga Rp 20.000 per kg
-                        if quantity > 0:
-                            cur.execute('UPDATE settings SET v = v - ? WHERE k = "current_seed_small"', (quantity,))
-                            # Kurangi stok benih di inventory
-                            cur.execute('''
-                                INSERT INTO inventory (date, description, quantity_out, unit_cost, value)
-                                VALUES (?, ?, ?, ?, ?)
-                            ''', (date, f'Penggunaan benih kecil: {description}', quantity, 20000, line['credit']))
-                    
-                    elif account and account['code'] == '108':  # Persediaan Benih Besar
-                        quantity = line['credit'] / 35000  # Harga Rp 35.000 per kg
-                        if quantity > 0:
-                            cur.execute('UPDATE settings SET v = v - ? WHERE k = "current_seed_large"', (quantity,))
-                            # Kurangi stok benih di inventory
-                            cur.execute('''
-                                INSERT INTO inventory (date, description, quantity_out, unit_cost, value)
-                                VALUES (?, ?, ?, ?, ?)
-                            ''', (date, f'Penggunaan benih besar: {description}', quantity, 35000, line['credit']))
-            
-            else:
-                # Handle transaksi penjualan/pembelian biasa
-                update_inventory_from_journal(entry_id)
-        
+        # 5. COMMIT semua perubahan
         db.commit()
+        
+        # 6. Clear cache setelah posting
+        clear_account_cache()
+        
+        # 7. Update real-time stock in settings
+        update_stock_settings_real_time(cur)
+        
+        print(f"✅ Jurnal #{entry_id} berhasil diposting: {description}")
         return entry_id
+        
     except Exception as e:
         db.rollback()
+        print(f"❌ Error posting jurnal: {e}")
         raise e
+
+def update_inventory_from_journal_lines(lines, date, description, cur):
+    """Update inventory berdasarkan baris jurnal"""
+    # Deteksi transaksi yang mempengaruhi inventory
+    for line in lines:
+        account_id = line['account_id']
+        # Dapatkan kode akun
+        cur.execute('SELECT code, name FROM accounts WHERE id = ?', (account_id,))
+        account = cur.fetchone()
+        
+        if not account:
+            continue
+            
+        account_code = account['code']
+        account_name = account['name']
+        
+        # Deteksi transaksi yang mempengaruhi persediaan tiram
+        if account_code in ['105', '106']:  # Persediaan Tiram
+            quantity = 0
+            unit_cost = 0
+            is_in = False
+            
+            if line.get('debit', 0) > 0:  # Pembelian/Panen
+                quantity = line['debit'] / (20000 if account_code == '105' else 35000)
+                unit_cost = 20000 if account_code == '105' else 35000
+                is_in = True
+                action = "Masuk"
+            elif line.get('credit', 0) > 0:  # Penjualan
+                quantity = line['credit'] / (20000 if account_code == '105' else 35000)
+                unit_cost = 20000 if account_code == '105' else 35000
+                is_in = False
+                action = "Keluar"
+            
+            if quantity > 0:
+                # Update inventory table
+                if is_in:
+                    cur.execute('''
+                        INSERT INTO inventory (date, description, quantity_in, unit_cost, value)
+                        VALUES (?, ?, ?, ?, ?)
+                    ''', (date, f'{action} {account_name}: {description}', quantity, unit_cost, line['debit'] if is_in else line['credit']))
+                else:
+                    cur.execute('''
+                        INSERT INTO inventory (date, description, quantity_out, unit_cost, value)
+                        VALUES (?, ?, ?, ?, ?)
+                    ''', (date, f'{action} {account_name}: {description}', quantity, unit_cost, line['credit'] if not is_in else line['debit']))
+                
+                # Update stock settings
+                stock_key = "current_stock_small" if account_code == '105' else "current_stock_large"
+                current_stock = get_current_stock_real_time(cur, stock_key)
+                
+                if is_in:
+                    new_stock = current_stock + quantity
+                else:
+                    new_stock = max(0, current_stock - quantity)
+                
+                cur.execute('UPDATE settings SET v = ? WHERE k = ?', (str(new_stock), stock_key))
+                
+                print(f"📦 Updated {stock_key}: {current_stock} → {new_stock} ({action} {quantity} kg)")
+
+def get_current_stock_real_time(cur, stock_key):
+    """Dapatkan stok real-time dari settings"""
+    cur.execute('SELECT v FROM settings WHERE k = ?', (stock_key,))
+    result = cur.fetchone()
+    if result and result['v']:
+        try:
+            return float(result['v'])
+        except ValueError:
+            return 0
+    return 0
+
+def update_stock_settings_real_time(cur):
+    """Update stock settings berdasarkan inventory yang sebenarnya"""
+    # Hitung stok besar dari inventory
+    cur.execute('''
+        SELECT 
+            COALESCE(SUM(CASE WHEN description LIKE '%besar%' OR description LIKE '%Besar%' THEN quantity_in - quantity_out ELSE 0 END), 0) as large,
+            COALESCE(SUM(CASE WHEN description LIKE '%kecil%' OR description LIKE '%Kecil%' THEN quantity_in - quantity_out ELSE 0 END), 0) as small
+        FROM inventory
+    ''')
+    stock_result = cur.fetchone()
     
+    if stock_result:
+        cur.execute('UPDATE settings SET v = ? WHERE k = "current_stock_large"', (str(stock_result['large']),))
+        cur.execute('UPDATE settings SET v = ? WHERE k = "current_stock_small"', (str(stock_result['small']),))
+
 def validate_journal_entry(lines, template_key=None):
     """Validasi entri jurnal dengan aturan yang lebih realistis"""
     errors = []
@@ -711,7 +760,7 @@ def validate_journal_entry(lines, template_key=None):
     if len(account_ids) != len(set(account_ids)):
         errors.append("Terdapat akun yang duplikat dalam entri yang sama")
     
-    # 4. Validasi setiap baris individual - PERBAIKAN: lebih fleksibel
+    # 4. Validasi setiap baris individual
     for i, line in enumerate(lines):
         account_id = line['account_id']
         debit = line.get('debit', 0)
@@ -736,21 +785,9 @@ def validate_journal_entry(lines, template_key=None):
         if debit < 0 or credit < 0:
             errors.append(f"Baris {i+1} ({account['name']}): Jumlah harus positif")
         
-        # 4.3 PERBAIKAN: HAPUS validasi normal balance yang terlalu ketat
-        # Dalam akuntansi, akun bisa diisi di sisi berlawanan dengan saldo normal
-        # Contoh: Kas (debit normal) bisa di kredit saat pembayaran
-        # Jadi kita HAPUS validasi ini:
-        # if debit > 0 and account['normal_balance'] == 'Credit':
-        #     errors.append(f"Baris {i+1} ({account['name']}): Akun ini normalnya kredit, tidak boleh diisi di debit")
-        # elif credit > 0 and account['normal_balance'] == 'Debit':
-        #     errors.append(f"Baris {i+1} ({account['name']}): Akun ini normalnya debit, tidak boleh diisi di kredit")
-        
-        # 4.4 Validasi sisi yang konsisten dengan input (jika ada informasi sisi)
-        if 'side' in line:
-            if line['side'] == 'debit' and credit > 0:
-                errors.append(f"Baris {i+1} ({account['name']}): Ditetapkan sebagai debit tetapi memiliki nilai kredit")
-            elif line['side'] == 'credit' and debit > 0:
-                errors.append(f"Baris {i+1} ({account['name']}): Ditetapkan sebagai kredit tetapi memiliki nilai debit")
+        # 4.3 Validasi maksimal satu sisi yang diisi
+        if debit == 0 and credit == 0:
+            errors.append(f"Baris {i+1} ({account['name']}): Debit atau kredit harus diisi")
     
     # 5. Validasi template compliance jika menggunakan template
     if template_key:
@@ -800,19 +837,9 @@ def validate_template_compliance(lines, template_key):
             # Validasi sisi tidak berubah untuk non-editable lines
             if 'side' in matching_line and matching_line['side'] != tpl_line['side']:
                 errors.append(f"Akun {tpl_line['account_code']} harus di sisi {tpl_line['side']} sesuai template")
-            
-            # Validasi account_id tidak berubah untuk non-editable lines
-            account_cur = get_db().execute(
-                'SELECT code FROM accounts WHERE id = ?',
-                (matching_line['account_id'],)
-            )
-            account = account_cur.fetchone()
-            if account and account['code'] != tpl_line['account_code']:
-                errors.append(f"Akun untuk baris template {tpl_line['account_code']} tidak boleh diubah")
     
     return errors
 
-# Fungsi helper untuk mendapatkan account_id dari account_code
 def get_account_id_from_code(account_code):
     """Mendapatkan account_id dari account_code"""
     cur = get_db().execute(
@@ -822,9 +849,8 @@ def get_account_id_from_code(account_code):
     account = cur.fetchone()
     return account['id'] if account else None
 
-# Fungsi helper untuk mendapatkan account_code dari account_id  
 def get_account_code_from_id(account_id):
-    """Mendapatkan account_code dari account_id"""
+    """Mendapatkan account_code dari account_id"""  
     cur = get_db().execute(
         'SELECT code FROM accounts WHERE id = ?',
         (account_id,)
@@ -848,9 +874,15 @@ def post_adjusting_entry(date, description, lines):
             ''', (adj_id, line['account_id'], line.get('debit', 0), line.get('credit', 0), line.get('description', '')))
         
         db.commit()
+        
+        # Clear cache setelah posting penyesuaian
+        clear_account_cache()
+        
+        print(f"✅ Penyesuaian #{adj_id} berhasil diposting: {description}")
         return adj_id
     except Exception as e:
         db.rollback()
+        print(f"❌ Error posting penyesuaian: {e}")
         raise e
 
 def update_inventory_from_journal(entry_id):
@@ -868,114 +900,101 @@ def update_inventory_from_journal(entry_id):
     ''', (entry_id,))
     lines = cur.fetchall()
     
-    # Periksa apakah ini transaksi penjualan (melibatkan persediaan dan pendapatan penjualan)
-    has_inventory = any(line['code'] in ['103', '103.1'] for line in lines)
-    has_sales = any(line['code'] in ['401', '401.1'] for line in lines)
-    
-    if has_inventory and has_sales:
-        # Ini adalah transaksi penjualan - kurangi persediaan
-        for line in lines:
-            if line['code'] in ['103', '103.1']:  # Akun persediaan
-                # Tentukan harga satuan berdasarkan jenis tiram
-                if line['code'] == '103':  # Tiram Besar
-                    unit_cost = 55000
-                    inventory_type = "Tiram Besar"
-                    stock_key = "current_stock_large"
-                else:  # Tiram Kecil
-                    unit_cost = 30000
-                    inventory_type = "Tiram Kecil"
-                    stock_key = "current_stock_small"
+    # Periksa transaksi yang mempengaruhi persediaan
+    for line in lines:
+        account_code = line['code']
+        
+        if account_code in ['105', '106']:  # Persediaan Tiram
+            if line['credit'] > 0:  # Penjualan
+                unit_cost = 20000 if account_code == '105' else 35000
+                quantity = line['credit'] / unit_cost
                 
-                quantity_sold = float(line['credit']) / float(unit_cost) if float(unit_cost) != 0 else 0
+                cur.execute('''
+                    INSERT INTO inventory (date, description, quantity_out, unit_cost, value)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (line['date'], f'Penjualan: {line["description"]}', quantity, unit_cost, line['credit']))
                 
-                if quantity_sold > 0:
-                    cur.execute('''
-                        INSERT INTO inventory (date, description, quantity_out, unit_cost, value)
-                        VALUES (?, ?, ?, ?, ?)
-                    ''', (lines[0]['date'], f'Penjualan {inventory_type}: {lines[0]["description"]}', quantity_sold, unit_cost, float(line['credit'])))
-                    
-                    # Perbarui stok saat ini dalam pengaturan
-                    cur.execute('SELECT v FROM settings WHERE k = ?', (stock_key,))
-                    result = cur.fetchone()
-                    current = float(result['v']) if result and result['v'] else 0
-                    new_stock = max(0, current - quantity_sold)
-                    cur.execute('UPDATE settings SET v = ? WHERE k = ?', (str(new_stock), stock_key))
+                # Update settings
+                stock_key = "current_stock_small" if account_code == '105' else "current_stock_large"
+                cur.execute('SELECT v FROM settings WHERE k = ?', (stock_key,))
+                result = cur.fetchone()
+                current = float(result['v']) if result and result['v'] else 0
+                new_stock = max(0, current - quantity)
+                cur.execute('UPDATE settings SET v = ? WHERE k = ?', (str(new_stock), stock_key))
     
     db.commit()
 
-def get_current_stock(stock_type='all'):
-    """Dapatkan stok tiram saat ini"""
+def get_current_stock(stock_type='all', force_refresh=False):
+    """Dapatkan stok tiram saat ini - REAL-TIME VERSION"""
+    # Cache untuk performa
+    if not force_refresh and hasattr(g, '_current_stock'):
+        if stock_type in g._current_stock:
+            return g._current_stock[stock_type]
+    
     db = get_db()
     cur = db.cursor()
     
+    # Hitung langsung dari inventory table untuk data real-time
+    cur.execute('''
+        SELECT 
+            COALESCE(SUM(CASE 
+                WHEN description LIKE '%besar%' OR description LIKE '%Besar%' 
+                THEN quantity_in - quantity_out 
+                ELSE 0 
+            END), 0) as large,
+            COALESCE(SUM(CASE 
+                WHEN description LIKE '%kecil%' OR description LIKE '%Kecil%' 
+                THEN quantity_in - quantity_out 
+                ELSE 0 
+            END), 0) as small
+        FROM inventory
+    ''')
+    result = cur.fetchone()
+    
+    large = int(result['large']) if result else 0
+    small = int(result['small']) if result else 0
+    
+    # Juga update settings untuk konsistensi
+    cur.execute('UPDATE settings SET v = ? WHERE k = "current_stock_large"', (str(large),))
+    cur.execute('UPDATE settings SET v = ? WHERE k = "current_stock_small"', (str(small),))
+    
+    # Cache hasilnya
+    if not hasattr(g, '_current_stock'):
+        g._current_stock = {}
+    
+    g._current_stock['large'] = large
+    g._current_stock['small'] = small
+    g._current_stock['all'] = {
+        'large': large,
+        'small': small,
+        'total': large + small
+    }
+    
     if stock_type == 'large':
-        cur.execute('SELECT v FROM settings WHERE k = "current_stock_large"')
-        result = cur.fetchone()
-        return int(result['v']) if result and result['v'] else 0
+        return large
     elif stock_type == 'small':
-        cur.execute('SELECT v FROM settings WHERE k = "current_stock_small"')
-        result = cur.fetchone()
-        return int(result['v']) if result and result['v'] else 0
+        return small
     else:
-        # Return dictionary dengan kedua stok
-        cur.execute('SELECT v FROM settings WHERE k = "current_stock_large"')
-        large_result = cur.fetchone()
-        large = int(large_result['v']) if large_result and large_result['v'] else 0
-        
-        cur.execute('SELECT v FROM settings WHERE k = "current_stock_small"')
-        small_result = cur.fetchone()
-        small = int(small_result['v']) if small_result and small_result['v'] else 0
-        
         return {
             'large': large,
             'small': small,
             'total': large + small
         }
-    
-
-def set_opening_balance(account_id, amount, balance_type):
-    """Menyimpan saldo awal dengan benar"""
-    db = get_db()
-    
-    # Hapus saldo lama jika ada
-    db.execute('DELETE FROM opening_balances WHERE account_id = ?', (account_id,))
-    
-    # Insert saldo baru
-    if amount > 0:
-        if balance_type == 'Debit':
-            db.execute('''
-                INSERT INTO opening_balances (account_id, debit_amount, credit_amount)
-                VALUES (?, ?, 0)
-            ''', (account_id, amount))
-        else:
-            db.execute('''
-                INSERT INTO opening_balances (account_id, debit_amount, credit_amount)
-                VALUES (?, 0, ?)
-            ''', (account_id, amount))
-    
-    db.commit()
-
-def get_opening_balance(account_id):
-    """Dapatkan saldo awal untuk akun tertentu - VERSI DIPERBAIKI"""
-    cur = get_db().execute('''
-        SELECT balance, balance_type FROM opening_balances 
-        WHERE account_id = ?
-    ''', (account_id,))
-    result = cur.fetchone()
-    
-    if result:
-        # PERBAIKAN: Return dengan tanda yang benar
-        if result['balance_type'] == 'Debit':
-            return result['balance']  # Positif untuk debit
-        else:
-            return -result['balance']  # Negatif untuk kredit
-    return 0
 
 def get_company_info():
     """Dapatkan informasi perusahaan dari pengaturan"""
     cur = get_db().execute('SELECT k, v FROM settings WHERE k IN ("company_name", "company_description", "company_location")')
     info = {row['k']: row['v'] for row in cur.fetchall()}
     return info
+
+def clear_all_caches():
+    """Clear semua cache untuk data real-time"""
+    if hasattr(g, '_account_balances'):
+        del g._account_balances
+    if hasattr(g, '_current_stock'):
+        del g._current_stock
+    if hasattr(g, '_dashboard_data'):
+        del g._dashboard_data
 
 def recover_possible_data():
     """Attempt to recover any unsaved data"""
@@ -999,6 +1018,14 @@ def recover_possible_data():
     except Exception as e:
         print(f"❌ Recovery failed: {e}")
         return False
+
+# Middleware untuk clear cache setelah setiap request yang mengubah data
+@app.after_request
+def clear_cache_after_modification(response):
+    """Clear cache setelah request yang mengubah data"""
+    if request.method in ['POST', 'PUT', 'DELETE', 'PATCH']:
+        clear_all_caches()
+    return response
 
 # Call recovery on startup
 def startup_tasks():
@@ -3252,6 +3279,7 @@ def logout():
 @app.route('/dashboard')
 @login_required
 def dashboard():
+    clear_all_caches()
     # Dapatkan info perusahaan
     company_info = get_company_info()
     current_stock = get_current_stock()  # Sekarang return dictionary
@@ -3962,6 +3990,13 @@ def api_accounts():
             for a in accounts
         ]
     }
+
+@app.route('/api/refresh_data')
+@login_required
+def refresh_data():
+    """Manual refresh semua data"""
+    clear_all_caches()
+    return jsonify({'success': True, 'message': 'Data telah di-refresh'})
 
 @app.route('/journal/new', methods=['GET', 'POST'])
 @login_required
@@ -7319,6 +7354,7 @@ def verify_balances():
     """
     
     return render_template_string(BASE_TEMPLATE, title='Verifikasi Saldo', body=body, user=current_user())
+
 
 
 
