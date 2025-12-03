@@ -5468,33 +5468,6 @@ def opening_balance():
             <li><strong>Kewajiban, Ekuitas & Pendapatan</strong>: Input nilai POSITIF (akan masuk Kredit)</li>
         </ul>
     </div>
-
-    <div class="alert alert-info">
-        <h6><i class="fas fa-info-circle me-2"></i>Contoh Data Sesuai Neraca Saldo Awal</h6>
-        <div class="row">
-            <div class="col-md-6">
-                <strong>Asset (Debit):</strong>
-                <ul class="mb-0">
-                    <li>Kas: 8,500,000</li>
-                    <li>Piutang Usaha: 4,500,000</li>
-                    <li>Persediaan Tiram Besar: 1,750,000</li>
-                    <li>Persediaan Tiram Kecil: 1,200,000</li>
-                    <li>Peralatan: 500,000</li>
-                    <li>Perlengkapan: 300,000</li>
-                    <li>Kendaraan: 12,000,000</li>
-                </ul>
-            </div>
-            <div class="col-md-6">
-                <strong>Liability & Equity (Credit):</strong>
-                <ul class="mb-0">
-                    <li>Akum. Penyusutan Kendaraan: 1,500,000</li>
-                    <li>Utang Usaha: 650,000</li>
-                    <li>Utang Gaji: 100,000</li>
-                    <li>Modal Pemilik: 22,300,000</li>
-                </ul>
-            </div>
-        </div>
-    </div>
     
     <div class="card">
         <div class="card-body">
@@ -7325,6 +7298,7 @@ def verify_balances():
     """
     
     return render_template_string(BASE_TEMPLATE, title='Verifikasi Saldo', body=body, user=current_user())
+
 
 
 
