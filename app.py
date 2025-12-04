@@ -305,7 +305,7 @@ def init_db():
             ''')
             print("✅ Sample inventory data created!")
 
-            journal_entries_seed = [
+            journal_data = [
                 {
                     "date": "2024-12-01",
                     "description": "Pembelian sarung tangan & keranjang",
@@ -574,10 +574,15 @@ def init_db():
                 cur.execute('''
                     INSERT INTO journal_entries (date, description, reference, transaction_type, posted)
                     VALUES (?, ?, ?, ?, 1)
-                ''', (entry["date"], entry["description"], "", "General"))
+                ''', (
+                    entry["date"],
+                    entry["description"],
+                    entry["reference"],
+                    entry["transaction_type"],
+                ))
                 entry_id = cur.lastrowid
 
-                for code, debit, credit, line_desc in entry["lines"]:
+                for line in entry["lines"]:
                     cur.execute('''
                         INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
                         VALUES (
@@ -585,13 +590,20 @@ def init_db():
                             (SELECT id FROM accounts WHERE code = ?),
                             ?, ?, ?
                         )
-                    ''', (entry_id, code, debit, credit, line_desc))
+                    ''', (
+                        entry_id,
+                        line["code"],
+                        line["debit"],
+                        line["credit"],
+                        line["line_desc"],
+                    ))
 
             print("✅ All journal entries inserted successfully!")
             
             db.commit()
             print("🎉 Database initialization completed successfully!")
             print("💡 Access /trial_balance to verify the opening balances")
+
             
         except Exception as e:
             db.rollback()
@@ -7583,6 +7595,7 @@ def verify_balances():
     """
     
     return render_template_string(BASE_TEMPLATE, title='Verifikasi Saldo', body=body, user=current_user())
+
 
 
 
