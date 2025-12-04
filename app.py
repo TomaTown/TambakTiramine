@@ -1199,35 +1199,23 @@ def update_inventory_from_journal(entry_id):
     
     db.commit()
 
-def get_current_stock(stock_type='all'):
-    """Dapatkan stok tiram saat ini"""
+def get_current_stock():
     db = get_db()
     cur = db.cursor()
-    
-    if stock_type == 'large':
-        cur.execute('SELECT v FROM settings WHERE k = "current_stock_large"')
-        result = cur.fetchone()
-        return int(result['v']) if result and result['v'] else 0
-    elif stock_type == 'small':
-        cur.execute('SELECT v FROM settings WHERE k = "current_stock_small"')
-        result = cur.fetchone()
-        return int(result['v']) if result and result['v'] else 0
-    else:
-        # Return dictionary dengan kedua stok
-        cur.execute('SELECT v FROM settings WHERE k = "current_stock_large"')
-        large_result = cur.fetchone()
-        large = int(large_result['v']) if large_result and large_result['v'] else 0
-        
-        cur.execute('SELECT v FROM settings WHERE k = "current_stock_small"')
-        small_result = cur.fetchone()
-        small = int(small_result['v']) if small_result and small_result['v'] else 0
-        
-        return {
-            'large': large,
-            'small': small,
-            'total': large + small
-        }
-    
+
+    large_result = cur.execute("SELECT v FROM settings WHERE k = 'current_stock_large'").fetchone()
+    small_result = cur.execute("SELECT v FROM settings WHERE k = 'current_stock_small'").fetchone()
+
+    def safe_number(value):
+        try:
+            return int(float(value))
+        except:
+            return 0
+
+    large = safe_number(large_result['v']) if large_result else 0
+    small = safe_number(small_result['v']) if small_result else 0
+
+    return {"large": large, "small": small}
 
 def set_opening_balance(account_id, amount, balance_type):
     """Menyimpan saldo awal dengan benar"""
@@ -7595,6 +7583,7 @@ def verify_balances():
     """
     
     return render_template_string(BASE_TEMPLATE, title='Verifikasi Saldo', body=body, user=current_user())
+
 
 
 
