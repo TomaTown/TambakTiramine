@@ -304,6 +304,270 @@ def init_db():
                 ('2024-01-01', 'Stok awal tiram kecil', 0, 30000, 0)
             ''')
             print("✅ Sample inventory data created!")
+
+            journal_entries_seed = [
+                {
+                    "date": "2024-12-01",
+                    "description": "Pembelian sarung tangan & keranjang",
+                    "reference": "JU-01",
+                    "transaction_type": "Umum",
+                    "lines": [
+                        {"code": "103", "debit": 100000, "credit": 0, "line_desc": "Peralatan"},
+                        {"code": "101", "debit": 0, "credit": 100000, "line_desc": "Kas"},
+                    ],
+                },
+                {
+                    "date": "2024-12-02",
+                    "description": "Pembelian alat panen",
+                    "reference": "JU-02",
+                    "transaction_type": "Umum",
+                    "lines": [
+                        {"code": "103", "debit": 50000, "credit": 0, "line_desc": "Peralatan"},
+                        {"code": "101", "debit": 0, "credit": 50000, "line_desc": "Kas"},
+                    ],
+                },
+                {
+                    "date": "2024-12-03",
+                    "description": "Pembelian tali",
+                    "reference": "JU-03A",
+                    "transaction_type": "Umum",
+                    "lines": [
+                        {"code": "103", "debit": 25000, "credit": 0, "line_desc": "Peralatan"},
+                        {"code": "101", "debit": 0, "credit": 25000, "line_desc": "Kas"},
+                    ],
+                },
+                {
+                    "date": "2024-12-03",
+                    "description": "Pembelian benih tiram kecil dan besar",
+                    "reference": "JU-03B",
+                    "transaction_type": "Umum",
+                    "lines": [
+                        {"code": "107", "debit": 140000, "credit": 0, "line_desc": "Persediaan benih kecil"},
+                        {"code": "108", "debit": 280000, "credit": 0, "line_desc": "Persediaan benih besar"},
+                        {"code": "101", "debit": 0, "credit": 420000, "line_desc": "Kas"},
+                    ],
+                },
+                {
+                    "date": "2024-12-04",
+                    "description": "Pembelian timbangan",
+                    "reference": "JU-04A",
+                    "transaction_type": "Umum",
+                    "lines": [
+                        {"code": "103", "debit": 100000, "credit": 0, "line_desc": "Peralatan"},
+                        {"code": "101", "debit": 0, "credit": 100000, "line_desc": "Kas"},
+                    ],
+                },
+                {
+                    "date": "2024-12-04",
+                    "description": "Pembelian plastik",
+                    "reference": "JU-04B",
+                    "transaction_type": "Umum",
+                    "lines": [
+                        {"code": "104", "debit": 30000, "credit": 0, "line_desc": "Perlengkapan"},
+                        {"code": "101", "debit": 0, "credit": 30000, "line_desc": "Kas"},
+                    ],
+                },
+                {
+                    "date": "2024-12-05",
+                    "description": "Penjualan tunai tiram besar 8 kg × 55.000",
+                    "reference": "JU-05",
+                    "transaction_type": "Penjualan",
+                    "lines": [
+                        {"code": "101", "debit": 440000, "credit": 0, "line_desc": "Kas"},
+                        {"code": "401", "debit": 0, "credit": 440000, "line_desc": "Penjualan - Tiram Besar"},
+                    ],
+                },
+                {
+                    "date": "2024-12-07",
+                    "description": "Penjualan kredit tiram kecil 9 kg × 30.000",
+                    "reference": "JU-06",
+                    "transaction_type": "Penjualan",
+                    "lines": [
+                        {"code": "102", "debit": 270000, "credit": 0, "line_desc": "Piutang Usaha"},
+                        {"code": "402", "debit": 0, "credit": 270000, "line_desc": "Penjualan - Tiram Kecil"},
+                    ],
+                },
+                {
+                    "date": "2024-12-10",
+                    "description": "Penjualan tunai tiram besar 6 kg × 55.000",
+                    "reference": "JU-07",
+                    "transaction_type": "Penjualan",
+                    "lines": [
+                        {"code": "101", "debit": 330000, "credit": 0, "line_desc": "Kas"},
+                        {"code": "401", "debit": 0, "credit": 330000, "line_desc": "Penjualan - Tiram Besar"},
+                    ],
+                },
+                {
+                    "date": "2024-12-12",
+                    "description": "Penjualan kredit tiram kecil 7 kg × 30.000",
+                    "reference": "JU-08",
+                    "transaction_type": "Penjualan",
+                    "lines": [
+                        {"code": "102", "debit": 210000, "credit": 0, "line_desc": "Piutang Usaha"},
+                        {"code": "402", "debit": 0, "credit": 210000, "line_desc": "Penjualan - Tiram Kecil"},
+                    ],
+                },
+                {
+                    "date": "2024-12-14",
+                    "description": "Pembayaran gaji karyawan 1",
+                    "reference": "JU-09",
+                    "transaction_type": "Umum",
+                    "lines": [
+                        {"code": "503", "debit": 70000, "credit": 0, "line_desc": "Beban Gaji"},
+                        {"code": "101", "debit": 0, "credit": 70000, "line_desc": "Kas"},
+                    ],
+                },
+                {
+                    "date": "2024-12-15",
+                    "description": "Penjualan tunai tiram besar 11 kg × 55.000",
+                    "reference": "JU-10",
+                    "transaction_type": "Penjualan",
+                    "lines": [
+                        {"code": "101", "debit": 605000, "credit": 0, "line_desc": "Kas"},
+                        {"code": "401", "debit": 0, "credit": 605000, "line_desc": "Penjualan - Tiram Besar"},
+                    ],
+                },
+                {
+                    "date": "2024-12-18",
+                    "description": "Pelunasan piutang transaksi 07/12",
+                    "reference": "JU-11",
+                    "transaction_type": "Penagihan",
+                    "lines": [
+                        {"code": "101", "debit": 270000, "credit": 0, "line_desc": "Kas"},
+                        {"code": "102", "debit": 0, "credit": 270000, "line_desc": "Piutang Usaha"},
+                    ],
+                },
+                {
+                    "date": "2024-12-19",
+                    "description": "Pembelian plastik",
+                    "reference": "JU-12",
+                    "transaction_type": "Umum",
+                    "lines": [
+                        {"code": "104", "debit": 30000, "credit": 0, "line_desc": "Perlengkapan"},
+                        {"code": "101", "debit": 0, "credit": 30000, "line_desc": "Kas"},
+                    ],
+                },
+                {
+                    "date": "2024-12-20",
+                    "description": "Penjualan kredit tiram kecil 10 kg × 30.000",
+                    "reference": "JU-13",
+                    "transaction_type": "Penjualan",
+                    "lines": [
+                        {"code": "102", "debit": 300000, "credit": 0, "line_desc": "Piutang Usaha"},
+                        {"code": "402", "debit": 0, "credit": 300000, "line_desc": "Penjualan - Tiram Kecil"},
+                    ],
+                },
+                {
+                    "date": "2024-12-21",
+                    "description": "Penjualan tunai tiram besar 7 kg × 55.000",
+                    "reference": "JU-14",
+                    "transaction_type": "Penjualan",
+                    "lines": [
+                        {"code": "101", "debit": 385000, "credit": 0, "line_desc": "Kas"},
+                        {"code": "401", "debit": 0, "credit": 385000, "line_desc": "Penjualan - Tiram Besar"},
+                    ],
+                },
+                {
+                    "date": "2024-12-23",
+                    "description": "Penjualan kredit tiram kecil 5 kg × 30.000",
+                    "reference": "JU-15",
+                    "transaction_type": "Penjualan",
+                    "lines": [
+                        {"code": "102", "debit": 150000, "credit": 0, "line_desc": "Piutang Usaha"},
+                        {"code": "402", "debit": 0, "credit": 150000, "line_desc": "Penjualan - Tiram Kecil"},
+                    ],
+                },
+                {
+                    "date": "2024-12-24",
+                    "description": "Pelunasan piutang transaksi 12/12",
+                    "reference": "JU-16",
+                    "transaction_type": "Penagihan",
+                    "lines": [
+                        {"code": "101", "debit": 210000, "credit": 0, "line_desc": "Kas"},
+                        {"code": "102", "debit": 0, "credit": 210000, "line_desc": "Piutang Usaha"},
+                    ],
+                },
+                {
+                    "date": "2024-12-26",
+                    "description": "Penjualan tunai tiram besar 5 kg × 55.000",
+                    "reference": "JU-17",
+                    "transaction_type": "Penjualan",
+                    "lines": [
+                        {"code": "101", "debit": 275000, "credit": 0, "line_desc": "Kas"},
+                        {"code": "401", "debit": 0, "credit": 275000, "line_desc": "Penjualan - Tiram Besar"},
+                    ],
+                },
+                {
+                    "date": "2024-12-27",
+                    "description": "Penjualan tunai tiram besar 4 kg × 55.000",
+                    "reference": "JU-18",
+                    "transaction_type": "Penjualan",
+                    "lines": [
+                        {"code": "101", "debit": 220000, "credit": 0, "line_desc": "Kas"},
+                        {"code": "401", "debit": 0, "credit": 220000, "line_desc": "Penjualan - Tiram Besar"},
+                    ],
+                },
+                {
+                    "date": "2024-12-28",
+                    "description": "Penjualan kredit tiram kecil 8 kg × 30.000",
+                    "reference": "JU-19A",
+                    "transaction_type": "Penjualan",
+                    "lines": [
+                        {"code": "102", "debit": 240000, "credit": 0, "line_desc": "Piutang Usaha"},
+                        {"code": "402", "debit": 0, "credit": 240000, "line_desc": "Penjualan - Tiram Kecil"},
+                    ],
+                },
+                {
+                    "date": "2024-12-28",
+                    "description": "Penjualan kredit tiram besar 7 kg × 55.000",
+                    "reference": "JU-19B",
+                    "transaction_type": "Penjualan",
+                    "lines": [
+                        {"code": "102", "debit": 385000, "credit": 0, "line_desc": "Piutang Usaha"},
+                        {"code": "401", "debit": 0, "credit": 385000, "line_desc": "Penjualan - Tiram Besar"},
+                    ],
+                },
+                {
+                    "date": "2024-12-29",
+                    "description": "Pelunasan piutang transaksi 20/12",
+                    "reference": "JU-20",
+                    "transaction_type": "Penagihan",
+                    "lines": [
+                        {"code": "101", "debit": 300000, "credit": 0, "line_desc": "Kas"},
+                        {"code": "102", "debit": 0, "credit": 300000, "line_desc": "Piutang Usaha"},
+                    ],
+                },
+                {
+                    "date": "2024-12-29",
+                    "description": "Pengakuan gaji karyawan (belum dibayar)",
+                    "reference": "JU-21",
+                    "transaction_type": "Penyesuaian",
+                    "lines": [
+                        {"code": "503", "debit": 70000, "credit": 0, "line_desc": "Beban Gaji"},
+                        {"code": "202", "debit": 0, "credit": 70000, "line_desc": "Utang Gaji"},
+                    ],
+                },
+                {
+                    "date": "2024-12-30",
+                    "description": "Penjualan tunai tiram kecil 6 kg × 30.000",
+                    "reference": "JU-22A",
+                    "transaction_type": "Penjualan",
+                    "lines": [
+                        {"code": "101", "debit": 180000, "credit": 0, "line_desc": "Kas"},
+                        {"code": "402", "debit": 0, "credit": 180000, "line_desc": "Penjualan - Tiram Kecil"},
+                    ],
+                },
+                {
+                    "date": "2024-12-30",
+                    "description": "Pelunasan piutang transaksi 23/12",
+                    "reference": "JU-22B",
+                    "transaction_type": "Penagihan",
+                    "lines": [
+                        {"code": "101", "debit": 150000, "credit": 0, "line_desc": "Kas"},
+                        {"code": "102", "debit": 0, "credit": 150000, "line_desc": "Piutang Usaha"},
+                    ],
+                },
+            ]
             
             db.commit()
             print("🎉 Database initialization completed successfully!")
@@ -7299,6 +7563,7 @@ def verify_balances():
     """
     
     return render_template_string(BASE_TEMPLATE, title='Verifikasi Saldo', body=body, user=current_user())
+
 
 
 
