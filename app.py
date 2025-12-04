@@ -568,6 +568,26 @@ def init_db():
                     ],
                 },
             ]
+
+            # Insert ke tabel journal_entries dan journal_lines
+            for entry in journal_data:
+                cur.execute('''
+                    INSERT INTO journal_entries (date, description, reference, transaction_type, posted)
+                    VALUES (?, ?, ?, ?, 1)
+                ''', (entry["date"], entry["description"], "", "General"))
+                entry_id = cur.lastrowid
+
+                for code, debit, credit, line_desc in entry["lines"]:
+                    cur.execute('''
+                        INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
+                        VALUES (
+                            ?,
+                            (SELECT id FROM accounts WHERE code = ?),
+                            ?, ?, ?
+                        )
+                    ''', (entry_id, code, debit, credit, line_desc))
+
+            print("✅ All journal entries inserted successfully!")
             
             db.commit()
             print("🎉 Database initialization completed successfully!")
@@ -7563,6 +7583,7 @@ def verify_balances():
     """
     
     return render_template_string(BASE_TEMPLATE, title='Verifikasi Saldo', body=body, user=current_user())
+
 
 
 
