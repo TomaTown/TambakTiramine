@@ -1690,183 +1690,137 @@ def get_account_id_by_code(code: str):
 
 
 def get_closing_entries():
-    """
-    Bangun jurnal penutup otomatis dari saldo akun (setelah penyesuaian).
-
-    Pola:
-    1) Tutup pendapatan -> debit pendapatan, kredit Ikhtisar Laba Rugi (302)
-    2) Tutup beban      -> debit Ikhtisar Laba Rugi (302), kredit beban
-    3) Tutup laba/rugi bersih -> dari Ikhtisar (302) ke Modal (301)
-    """
-    db = get_db()
-
-    # Semua akun pendapatan
-    pendapatan = db.execute(
-        """
-        SELECT id, code, name
-        FROM accounts
-        WHERE acct_type = 'Revenue'
-        """
-    ).fetchall()
-
-    # Semua akun beban
-    beban = db.execute(
-        """
-        SELECT id, code, name
-        FROM accounts
-        WHERE acct_type = 'Expense'
-        """
-    ).fetchall()
-
-    closing_entries = []
-    total_pendapatan = 0
-    total_beban = 0
-
-    # ============================
-    # (1) PENUTUPAN PENDAPATAN
-    # ============================
-    for p in pendapatan:
-        saldo = get_account_balance(p["id"], include_adjustments=True)
-        if abs(saldo) > 0.005:  # abaikan saldo 0
-            total_pendapatan += saldo
-            closing_entries.append(
-                {
-                    "account_id": p["id"],
-                    "debit": saldo,
-                    "credit": 0,
-                    "description": "Penutupan pendapatan",
-                }
-            )
-
-    if abs(total_pendapatan) > 0.005:
-        closing_entries.append(
-            {
-                "account_id": get_account_id_by_code("302"),  # Ikhtisar Laba Rugi
-                "debit": 0,
-                "credit": total_pendapatan,
-                "description": "Penutupan pendapatan ke Ikhtisar Laba Rugi",
-            }
-        )
-
-
-    # ============================
-    # (2) PENUTUPAN BEBAN
-    # ============================
-    for b in beban:
-        saldo = get_account_balance(b["id"], include_adjustments=True)
-        if abs(saldo) > 0.005:
-            total_beban += saldo
-            closing_entries.append(
-                {
-                    "account_id": b["id"],
-                    "debit": 0,
-                    "credit": saldo,
-                    "description": "Penutupan beban",
-                }
-            )
-
-    if abs(total_beban) > 0.005:
-        closing_entries.append(
-            {
-                "account_id": get_account_id_by_code("302"),  # Ikhtisar Laba Rugi
-                "debit": total_beban,
-                "credit": 0,
-                "description": "Penutupan beban ke Ikhtisar Laba Rugi",
-            }
-        )
-
-
-    # ============================
-    # (3) LABA BERSIH → MODAL
-    # ============================
-    laba_bersih = total_pendapatan - total_beban
-
-    if laba_bersih > 0:  # Laba
-        closing_entries.append(
-            {
-                "account_id": get_account_id_by_code("302"),
-                "debit": laba_bersih,
-                "credit": 0,
-                "description": "Penutupan laba bersih",
-            }
-        )
-        closing_entries.append(
-            {
-                "account_id": get_account_id_by_code("301"),  # Modal
-                "debit": 0,
-                "credit": laba_bersih,
-                "description": "Pemindahan laba bersih ke modal",
-            }
-        )
-    elif laba_bersih < 0:  # Rugi
-        rugi = abs(laba_bersih)
-        closing_entries.append(
-            {
-                "account_id": get_account_id_by_code("301"),
-                "debit": rugi,
-                "credit": 0,
-                "description": "Pemindahan rugi bersih ke modal",
-            }
-        )
-        closing_entries.append(
-            {
-                "account_id": get_account_id_by_code("302"),
-                "debit": 0,
-                "credit": rugi,
-                "description": "Penutupan rugi bersih",
-            }
-        )
-
-    return closing_entries, laba_bersih
-
-
-def post_closing_entries():
-    """
-    Posting jurnal penutup ke tabel journal_entries & journal_lines.
-
-    Di-post sebagai **1 entri jurnal** dengan banyak baris
-    (di Excel/halaman bisa kamu tampilkan seperti contoh jurnal penutup).
-    """
-    closing_entries, net_income = get_closing_entries()
-
-    if not closing_entries:
-        return None, net_income
-
+    """Buat entri jurnal penutup untuk menutup akun nominal (pendapatan dan beban)"""
     db = get_db()
     cur = db.cursor()
+    
+    # Hitung total pendapatan dan beban
+    cur.execute('''
+        SELECT 
+            SUM(CASE WHEN a.code LIKE '4%' THEN jl.credit - jl.debit ELSE 0 END) as net_revenue,
+            SUM(CASE WHEN a.code LIKE '5%' THEN jl.debit - jl.credit ELSE 0 END) as net_expense
+        FROM journal_lines jl
+        JOIN accounts a ON jl.account_id = a.id
+    ''')
+    result = cur.fetchone()
+    
+    net_revenue = result['net_revenue'] or 0
+    net_expense = result['net_expense'] or 0
+    net_income = net_revenue - net_expense
+    
+    closing_entries = []
+    
+    # 1. Tutup akun pendapatan ke Ikhtisar Laba Rugi
+    if net_revenue > 0:
+        cur.execute('SELECT id FROM accounts WHERE code LIKE "4%" AND acct_type = "Revenue"')
+        revenue_accounts = cur.fetchall()
+        
+        for account in revenue_accounts:
+            account_balance = get_account_balance(account['id'])
+            if account_balance > 0:
+                closing_entries.append({
+                    'account_id': account['id'],
+                    'debit': 0,
+                    'credit': account_balance,
+                    'description': f'Penutupan pendapatan'
+                })
+    
+    # 2. Tutup akun beban ke Ikhtisar Laba Rugi
+    if net_expense > 0:
+        cur.execute('SELECT id FROM accounts WHERE code LIKE "5%" AND acct_type = "Expense"')
+        expense_accounts = cur.fetchall()
+        
+        for account in expense_accounts:
+            account_balance = get_account_balance(account['id'])
+            if account_balance > 0:
+                closing_entries.append({
+                    'account_id': account['id'],
+                    'debit': account_balance,
+                    'credit': 0,
+                    'description': f'Penutupan beban'
+                })
+    
+    # 3. Tutup Ikhtisar Laba Rugi ke Laba Ditahan
+    if net_income != 0:
+        # Cari akun Ikhtisar Laba Rugi atau Laba Ditahan
+        cur.execute('SELECT id FROM accounts WHERE code = "303" OR name LIKE "%Laba Ditahan%"')
+        retained_earnings = cur.fetchone()
+        
+        if retained_earnings:
+            if net_income > 0:
+                # Laba bersih - tambah ke Laba Ditahan
+                closing_entries.append({
+                    'account_id': retained_earnings['id'],
+                    'debit': 0,
+                    'credit': net_income,
+                    'description': f'Laba bersih periode berjalan'
+                })
+            else:
+                # Rugi bersih - kurangi dari Laba Ditahan
+                closing_entries.append({
+                    'account_id': retained_earnings['id'],
+                    'debit': abs(net_income),
+                    'credit': 0,
+                    'description': f'Rugi bersih periode berjalan'
+                })
+    
+    return closing_entries, net_income
 
+def get_post_closing_trial_balance():
+    """Hasilkan neraca saldo setelah penutupan (hanya akun riil)"""
+    accounts = all_accounts()
+    pctb_data = []
+    total_debit = 0
+    total_credit = 0
+    
+    for account in accounts:
+        # Hanya akun riil (Asset, Liability, Equity) yang ada di neraca saldo penutup
+        if account['acct_type'] in ('Asset', 'Liability', 'Equity'):
+            balance = get_account_balance(account['id'], include_adjustments=True)
+            
+            if account['normal_balance'] == 'Debit':
+                debit = balance if balance > 0 else 0
+                credit = -balance if balance < 0 else 0
+            else:
+                debit = -balance if balance < 0 else 0
+                credit = balance if balance > 0 else 0
+            
+            pctb_data.append({
+                'account': account,
+                'debit': debit,
+                'credit': credit
+            })
+            
+            total_debit += debit
+            total_credit += credit
+    
+    return pctb_data, total_debit, total_credit
+
+def post_closing_entries():
+    """Posting entri jurnal penutup"""
+    closing_entries, net_income = get_closing_entries()
+    
+    if not closing_entries:
+        return None, 0
+    
+    db = get_db()
+    cur = db.cursor()
+    
     try:
-        # Buat satu entry jurnal 'Jurnal Penutup'
-        cur.execute(
-            """
-            INSERT INTO journal_entries (date, description, reference, transaction_type, posted)
+        # Buat entri jurnal penutup
+        cur.execute('''
+            INSERT INTO journal_entries (date, description, reference, transaction_type, posted) 
             VALUES (?, ?, ?, ?, 1)
-            """,
-            (
-                datetime.now().date().isoformat(),
-                "Jurnal Penutup - Akhir Periode",
-                "CLOSING",
-                "Closing Entry",
-            ),
-        )
+        ''', (datetime.now().date().isoformat(), 'Jurnal Penutup - Akhir Periode', 'CLOSING', 'Closing Entry'))
         entry_id = cur.lastrowid
-
-        # Baris-baris jurnal penutup
-        for line in closing_entries:
-            cur.execute(
-                """
-                INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
+        
+        # Tambahkan baris jurnal penutup
+        for entry in closing_entries:
+            cur.execute('''
+                INSERT INTO journal_lines (entry_id, account_id, debit, credit, description) 
                 VALUES (?, ?, ?, ?, ?)
-                """,
-                (
-                    entry_id,
-                    line["account_id"],
-                    float(line.get("debit", 0) or 0),
-                    float(line.get("credit", 0) or 0),
-                    line.get("description", ""),
-                ),
-            )
-
+            ''', (entry_id, entry['account_id'], entry.get('debit', 0), entry.get('credit', 0), entry.get('description', '')))
+        
         db.commit()
         return entry_id, net_income
     except Exception as e:
@@ -7735,6 +7689,7 @@ def verify_balances():
     """
     
     return render_template_string(BASE_TEMPLATE, title='Verifikasi Saldo', body=body, user=current_user())
+
 
 
 
