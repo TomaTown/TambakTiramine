@@ -6198,14 +6198,6 @@ def closing_entries():
         user=current_user(),
     )
 
-@app.route('/auto_closing')
-@login_required
-def auto_closing():
-    entries = generate_closing_entries()
-    post_closing_entries(entries)
-    flash("Jurnal penutup berhasil dibuat otomatis!")
-    return redirect('/closing')
-
 
 # ---------- Export Financial Reports ----------
 
@@ -7743,6 +7735,7 @@ def verify_balances():
     """
     
     return render_template_string(BASE_TEMPLATE, title='Verifikasi Saldo', body=body, user=current_user())
+
 
 
 
