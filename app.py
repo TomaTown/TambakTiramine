@@ -247,11 +247,6 @@ def init_db():
                 cur.execute("INSERT INTO accounts (code, name, acct_type, normal_balance, description) VALUES (?,?,?,?,?)",
                             (code, name, atype, normal, desc))
                 print(f"✅ Created account: {code} - {name}")
-
-                  for code, name, atype, normal, desc in accounts:
-                cur.execute('INSERT INTO accounts (code, name, acct_type, normal_balance, description) VALUES (?,?,?,?,?)', 
-                            (code, name, atype, normal, desc))
-                print(f"✅ Created account: {code} - {name}")
             
             # INSERT SALDO AWAL DEFAULT SESUAI NERACA SALDO AWAL ANDA
             print("🔧 Setting up default opening balances...")
@@ -7748,6 +7743,7 @@ def verify_balances():
     """
     
     return render_template_string(BASE_TEMPLATE, title='Verifikasi Saldo', body=body, user=current_user())
+
 
 
 
