@@ -248,71 +248,366 @@ def init_db():
                             (code, name, atype, normal, desc))
                 print(f"✅ Created account: {code} - {name}")
 
-            # =========================================================
-            # 📌 SEED JURNAL PENUTUP (TIDAK MENGGANGGU JURNAL LAIN)
-            # =========================================================
-            print("📌 Seeding Closing Journal Entries...")
+                  for code, name, atype, normal, desc in accounts:
+                cur.execute('INSERT INTO accounts (code, name, acct_type, normal_balance, description) VALUES (?,?,?,?,?)', 
+                            (code, name, atype, normal, desc))
+                print(f"✅ Created account: {code} - {name}")
+            
+            # INSERT SALDO AWAL DEFAULT SESUAI NERACA SALDO AWAL ANDA
+            print("🔧 Setting up default opening balances...")
+            opening_balances = [
+                # Assets (Debit)
+                (1, 8500000, 0),    # Kas (101)
+                (2, 4500000, 0),    # Piutang Usaha (102)
+                (3, 500000, 0),     # Peralatan Tambak (103)
+                (4, 300000, 0),     # Perlengkapan (104)
+                (5, 1200000, 0),    # Persediaan - Tiram Kecil (105)
+                (6, 1750000, 0),    # Persediaan - Tiram Besar (106)
+                (7, 12000000, 0),   # Kendaraan (107)
+                
+                # Contra Asset (Credit)
+                (8, 0, 1500000),    # Akumulasi Penyusutan Kendaraan (108)
+                
+                # Liabilities (Credit)
+                (9, 0, 650000),     # Utang Usaha (201)
+                (10, 0, 100000),    # Utang Gaji (202)
+                
+                # Equity (Credit)
+                (11, 0, 22300000),  # Modal Pemilik (301)
+                
+                # Revenue (Credit) - dari penjualan
+                (12, 0, 4000000),   # Penjualan - Tiram Besar (401)
+                (13, 0, 3000000),   # Penjualan - Tiram Kecil (402)
+                
+                # Expenses (Debit) - dari HPP dan beban
+                (14, 1000000, 0),   # HPP - Tiram Kecil (501)
+                (15, 1500000, 0),   # HPP - Tiram Besar (502)
+                (16, 300000, 0),    # Beban Gaji (503)
+            ]
+            
+            for account_id, debit_amount, credit_amount in opening_balances:
+                cur.execute('''
+                    INSERT INTO opening_balances (account_id, debit_amount, credit_amount) 
+                    VALUES (?, ?, ?)
+                ''', (account_id, debit_amount, credit_amount))
+                print(f"✅ Set opening balance for account {account_id}: Debit={debit_amount:,}, Credit={credit_amount:,}")
+            
+            # Hitung total untuk verifikasi
+            total_debit = sum(balance[1] for balance in opening_balances)
+            total_credit = sum(balance[2] for balance in opening_balances)
+            print(f"📊 TOTAL DEBIT: {total_debit:,}")
+            print(f"📊 TOTAL CREDIT: {total_credit:,}")
+            print(f"📊 BALANCED: {total_debit == total_credit}")
+            
+            # Insert sample inventory data
+            cur.execute('''
+                INSERT INTO inventory (date, description, quantity_in, unit_cost, value)
+                VALUES 
+                ('2024-01-01', 'Stok awal tiram besar', 0, 55000, 0),
+                ('2024-01-01', 'Stok awal tiram kecil', 0, 30000, 0)
+            ''')
+            print("✅ Sample inventory data created!")
 
-            def acc(code):
-                cur.execute("SELECT id FROM accounts WHERE code = ?", (code,))
-                return cur.fetchone()["id"]
-
-            # --- 1) Closing Pendapatan ---
-            cur.execute("""
-                INSERT INTO journal_entries (date, description, posted, transaction_type)
-                VALUES ('2025-12-31', 'Penutupan Pendapatan', 1, 'Closing Entry')
-            """)
-            jid = cur.lastrowid
-
-            closing_1 = [
-                (acc("402"), 4350000, 0),
-                (acc("401"), 6640000, 0),
-                (acc("302"), 0, 10990000)
+            journal_data = [
+                {
+                    "date": "2024-12-01",
+                    "description": "Pembelian sarung tangan & keranjang",
+                    "reference": "JU-01",
+                    "transaction_type": "Umum",
+                    "lines": [
+                        {"code": "103", "debit": 100000, "credit": 0, "line_desc": "Peralatan"},
+                        {"code": "101", "debit": 0, "credit": 100000, "line_desc": "Kas"},
+                    ],
+                },
+                {
+                    "date": "2024-12-02",
+                    "description": "Pembelian alat panen",
+                    "reference": "JU-02",
+                    "transaction_type": "Umum",
+                    "lines": [
+                        {"code": "103", "debit": 50000, "credit": 0, "line_desc": "Peralatan"},
+                        {"code": "101", "debit": 0, "credit": 50000, "line_desc": "Kas"},
+                    ],
+                },
+                {
+                    "date": "2024-12-03",
+                    "description": "Pembelian tali",
+                    "reference": "JU-03A",
+                    "transaction_type": "Umum",
+                    "lines": [
+                        {"code": "103", "debit": 25000, "credit": 0, "line_desc": "Peralatan"},
+                        {"code": "101", "debit": 0, "credit": 25000, "line_desc": "Kas"},
+                    ],
+                },
+                {
+                    "date": "2024-12-03",
+                    "description": "Pembelian benih tiram kecil dan besar",
+                    "reference": "JU-03B",
+                    "transaction_type": "Umum",
+                    "lines": [
+                        {"code": "107", "debit": 140000, "credit": 0, "line_desc": "Persediaan benih kecil"},
+                        {"code": "108", "debit": 280000, "credit": 0, "line_desc": "Persediaan benih besar"},
+                        {"code": "101", "debit": 0, "credit": 420000, "line_desc": "Kas"},
+                    ],
+                },
+                {
+                    "date": "2024-12-04",
+                    "description": "Pembelian timbangan",
+                    "reference": "JU-04A",
+                    "transaction_type": "Umum",
+                    "lines": [
+                        {"code": "103", "debit": 100000, "credit": 0, "line_desc": "Peralatan"},
+                        {"code": "101", "debit": 0, "credit": 100000, "line_desc": "Kas"},
+                    ],
+                },
+                {
+                    "date": "2024-12-04",
+                    "description": "Pembelian plastik",
+                    "reference": "JU-04B",
+                    "transaction_type": "Umum",
+                    "lines": [
+                        {"code": "104", "debit": 30000, "credit": 0, "line_desc": "Perlengkapan"},
+                        {"code": "101", "debit": 0, "credit": 30000, "line_desc": "Kas"},
+                    ],
+                },
+                {
+                    "date": "2024-12-05",
+                    "description": "Penjualan tunai tiram besar 8 kg × 55.000",
+                    "reference": "JU-05",
+                    "transaction_type": "Penjualan",
+                    "lines": [
+                        {"code": "101", "debit": 440000, "credit": 0, "line_desc": "Kas"},
+                        {"code": "401", "debit": 0, "credit": 440000, "line_desc": "Penjualan - Tiram Besar"},
+                    ],
+                },
+                {
+                    "date": "2024-12-07",
+                    "description": "Penjualan kredit tiram kecil 9 kg × 30.000",
+                    "reference": "JU-06",
+                    "transaction_type": "Penjualan",
+                    "lines": [
+                        {"code": "102", "debit": 270000, "credit": 0, "line_desc": "Piutang Usaha"},
+                        {"code": "402", "debit": 0, "credit": 270000, "line_desc": "Penjualan - Tiram Kecil"},
+                    ],
+                },
+                {
+                    "date": "2024-12-10",
+                    "description": "Penjualan tunai tiram besar 6 kg × 55.000",
+                    "reference": "JU-07",
+                    "transaction_type": "Penjualan",
+                    "lines": [
+                        {"code": "101", "debit": 330000, "credit": 0, "line_desc": "Kas"},
+                        {"code": "401", "debit": 0, "credit": 330000, "line_desc": "Penjualan - Tiram Besar"},
+                    ],
+                },
+                {
+                    "date": "2024-12-12",
+                    "description": "Penjualan kredit tiram kecil 7 kg × 30.000",
+                    "reference": "JU-08",
+                    "transaction_type": "Penjualan",
+                    "lines": [
+                        {"code": "102", "debit": 210000, "credit": 0, "line_desc": "Piutang Usaha"},
+                        {"code": "402", "debit": 0, "credit": 210000, "line_desc": "Penjualan - Tiram Kecil"},
+                    ],
+                },
+                {
+                    "date": "2024-12-14",
+                    "description": "Pembayaran gaji karyawan 1",
+                    "reference": "JU-09",
+                    "transaction_type": "Umum",
+                    "lines": [
+                        {"code": "503", "debit": 70000, "credit": 0, "line_desc": "Beban Gaji"},
+                        {"code": "101", "debit": 0, "credit": 70000, "line_desc": "Kas"},
+                    ],
+                },
+                {
+                    "date": "2024-12-15",
+                    "description": "Penjualan tunai tiram besar 11 kg × 55.000",
+                    "reference": "JU-10",
+                    "transaction_type": "Penjualan",
+                    "lines": [
+                        {"code": "101", "debit": 605000, "credit": 0, "line_desc": "Kas"},
+                        {"code": "401", "debit": 0, "credit": 605000, "line_desc": "Penjualan - Tiram Besar"},
+                    ],
+                },
+                {
+                    "date": "2024-12-18",
+                    "description": "Pelunasan piutang transaksi 07/12",
+                    "reference": "JU-11",
+                    "transaction_type": "Penagihan",
+                    "lines": [
+                        {"code": "101", "debit": 270000, "credit": 0, "line_desc": "Kas"},
+                        {"code": "102", "debit": 0, "credit": 270000, "line_desc": "Piutang Usaha"},
+                    ],
+                },
+                {
+                    "date": "2024-12-19",
+                    "description": "Pembelian plastik",
+                    "reference": "JU-12",
+                    "transaction_type": "Umum",
+                    "lines": [
+                        {"code": "104", "debit": 30000, "credit": 0, "line_desc": "Perlengkapan"},
+                        {"code": "101", "debit": 0, "credit": 30000, "line_desc": "Kas"},
+                    ],
+                },
+                {
+                    "date": "2024-12-20",
+                    "description": "Penjualan kredit tiram kecil 10 kg × 30.000",
+                    "reference": "JU-13",
+                    "transaction_type": "Penjualan",
+                    "lines": [
+                        {"code": "102", "debit": 300000, "credit": 0, "line_desc": "Piutang Usaha"},
+                        {"code": "402", "debit": 0, "credit": 300000, "line_desc": "Penjualan - Tiram Kecil"},
+                    ],
+                },
+                {
+                    "date": "2024-12-21",
+                    "description": "Penjualan tunai tiram besar 7 kg × 55.000",
+                    "reference": "JU-14",
+                    "transaction_type": "Penjualan",
+                    "lines": [
+                        {"code": "101", "debit": 385000, "credit": 0, "line_desc": "Kas"},
+                        {"code": "401", "debit": 0, "credit": 385000, "line_desc": "Penjualan - Tiram Besar"},
+                    ],
+                },
+                {
+                    "date": "2024-12-23",
+                    "description": "Penjualan kredit tiram kecil 5 kg × 30.000",
+                    "reference": "JU-15",
+                    "transaction_type": "Penjualan",
+                    "lines": [
+                        {"code": "102", "debit": 150000, "credit": 0, "line_desc": "Piutang Usaha"},
+                        {"code": "402", "debit": 0, "credit": 150000, "line_desc": "Penjualan - Tiram Kecil"},
+                    ],
+                },
+                {
+                    "date": "2024-12-24",
+                    "description": "Pelunasan piutang transaksi 12/12",
+                    "reference": "JU-16",
+                    "transaction_type": "Penagihan",
+                    "lines": [
+                        {"code": "101", "debit": 210000, "credit": 0, "line_desc": "Kas"},
+                        {"code": "102", "debit": 0, "credit": 210000, "line_desc": "Piutang Usaha"},
+                    ],
+                },
+                {
+                    "date": "2024-12-26",
+                    "description": "Penjualan tunai tiram besar 5 kg × 55.000",
+                    "reference": "JU-17",
+                    "transaction_type": "Penjualan",
+                    "lines": [
+                        {"code": "101", "debit": 275000, "credit": 0, "line_desc": "Kas"},
+                        {"code": "401", "debit": 0, "credit": 275000, "line_desc": "Penjualan - Tiram Besar"},
+                    ],
+                },
+                {
+                    "date": "2024-12-27",
+                    "description": "Penjualan tunai tiram besar 4 kg × 55.000",
+                    "reference": "JU-18",
+                    "transaction_type": "Penjualan",
+                    "lines": [
+                        {"code": "101", "debit": 220000, "credit": 0, "line_desc": "Kas"},
+                        {"code": "401", "debit": 0, "credit": 220000, "line_desc": "Penjualan - Tiram Besar"},
+                    ],
+                },
+                {
+                    "date": "2024-12-28",
+                    "description": "Penjualan kredit tiram kecil 8 kg × 30.000",
+                    "reference": "JU-19A",
+                    "transaction_type": "Penjualan",
+                    "lines": [
+                        {"code": "102", "debit": 240000, "credit": 0, "line_desc": "Piutang Usaha"},
+                        {"code": "402", "debit": 0, "credit": 240000, "line_desc": "Penjualan - Tiram Kecil"},
+                    ],
+                },
+                {
+                    "date": "2024-12-28",
+                    "description": "Penjualan kredit tiram besar 7 kg × 55.000",
+                    "reference": "JU-19B",
+                    "transaction_type": "Penjualan",
+                    "lines": [
+                        {"code": "102", "debit": 385000, "credit": 0, "line_desc": "Piutang Usaha"},
+                        {"code": "401", "debit": 0, "credit": 385000, "line_desc": "Penjualan - Tiram Besar"},
+                    ],
+                },
+                {
+                    "date": "2024-12-29",
+                    "description": "Pelunasan piutang transaksi 20/12",
+                    "reference": "JU-20",
+                    "transaction_type": "Penagihan",
+                    "lines": [
+                        {"code": "101", "debit": 300000, "credit": 0, "line_desc": "Kas"},
+                        {"code": "102", "debit": 0, "credit": 300000, "line_desc": "Piutang Usaha"},
+                    ],
+                },
+                {
+                    "date": "2024-12-29",
+                    "description": "Pengakuan gaji karyawan (belum dibayar)",
+                    "reference": "JU-21",
+                    "transaction_type": "Penyesuaian",
+                    "lines": [
+                        {"code": "503", "debit": 70000, "credit": 0, "line_desc": "Beban Gaji"},
+                        {"code": "202", "debit": 0, "credit": 70000, "line_desc": "Utang Gaji"},
+                    ],
+                },
+                {
+                    "date": "2024-12-30",
+                    "description": "Penjualan tunai tiram kecil 6 kg × 30.000",
+                    "reference": "JU-22A",
+                    "transaction_type": "Penjualan",
+                    "lines": [
+                        {"code": "101", "debit": 180000, "credit": 0, "line_desc": "Kas"},
+                        {"code": "402", "debit": 0, "credit": 180000, "line_desc": "Penjualan - Tiram Kecil"},
+                    ],
+                },
+                {
+                    "date": "2024-12-30",
+                    "description": "Pelunasan piutang transaksi 23/12",
+                    "reference": "JU-22B",
+                    "transaction_type": "Penagihan",
+                    "lines": [
+                        {"code": "101", "debit": 150000, "credit": 0, "line_desc": "Kas"},
+                        {"code": "102", "debit": 0, "credit": 150000, "line_desc": "Piutang Usaha"},
+                    ],
+                },
             ]
 
-            for a, d, c in closing_1:
-                cur.execute("INSERT INTO journal_lines (entry_id, account_id, debit, credit) VALUES (?, ?, ?, ?)",
-                            (jid, a, d, c))
+            # Insert ke tabel journal_entries dan journal_lines
+            for entry in journal_data:
+                cur.execute('''
+                    INSERT INTO journal_entries (date, description, reference, transaction_type, posted)
+                    VALUES (?, ?, ?, ?, 1)
+                ''', (
+                    entry["date"],
+                    entry["description"],
+                    entry["reference"],
+                    entry["transaction_type"],
+                ))
+                entry_id = cur.lastrowid
 
-            # --- 2) Closing Beban + HPP ---
-            cur.execute("""
-                INSERT INTO journal_entries (date, description, posted, transaction_type)
-                VALUES ('2025-12-31', 'Penutupan Beban dan HPP', 1, 'Closing Entry')
-            """)
-            jid = cur.lastrowid
+                for line in entry["lines"]:
+                    cur.execute('''
+                        INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
+                        VALUES (
+                            ?,
+                            (SELECT id FROM accounts WHERE code = ?),
+                            ?, ?, ?
+                        )
+                    ''', (
+                        entry_id,
+                        line["code"],
+                        line["debit"],
+                        line["credit"],
+                        line["line_desc"],
+                    ))
 
-            closing_2 = [
-                (acc("302"), 6035000, 0),
-                (acc("502"), 0, 3215000),
-                (acc("501"), 0, 2180000),
-                (acc("503"), 0, 440000),
-                (acc("504"), 0, 200000)
-            ]
-
-            for a, d, c in closing_2:
-                cur.execute("INSERT INTO journal_lines (entry_id, account_id, debit, credit) VALUES (?, ?, ?, ?)",
-                            (jid, a, d, c))
-
-            # --- 3) Laba Bersih → Modal ---
-            cur.execute("""
-                INSERT INTO journal_entries (date, description, posted, transaction_type)
-                VALUES ('2025-12-31', 'Pemindahan Laba Bersih ke Modal', 1, 'Closing Entry')
-            """)
-            jid = cur.lastrowid
-
-            closing_3 = [
-                (acc("302"), 4955000, 0),
-                (acc("301"), 0, 4955000)
-            ]
-
-            for a, d, c in closing_3:
-                cur.execute("INSERT INTO journal_lines (entry_id, account_id, debit, credit) VALUES (?, ?, ?, ?)",
-                            (jid, a, d, c))
-
-            print("✅ Closing Journal Entries Seeded.")
-
+            print("✅ All journal entries inserted successfully!")
+            
             db.commit()
-        
+            print("🎉 Database initialization completed successfully!")
+            print("💡 Access /trial_balance to verify the opening balances")
+
+            
         except Exception as e:
             db.rollback()
             print(f"❌ Database initialization failed: {e}")
@@ -433,6 +728,66 @@ def get_account_id(cur, code):
     cur.execute("SELECT id FROM accounts WHERE code = ?", (code,))
     result = cur.fetchone()
     return result["id"] if result else None
+
+def fix_opening_balances():
+    """Memperbaiki saldo awal agar sesuai dengan prinsip akuntansi"""
+    db = get_db()
+    cur = db.cursor()
+    
+    # Hapus semua saldo awal yang ada
+    cur.execute('DELETE FROM opening_balances')
+    
+    # DATA SALDO AWAL YANG BENAR - SESUAI DENGAN NERACA SALDO AWAL
+    # Total harus balance: Debit = Credit = Rp 31.550.000
+    opening_balances_corrected = [
+        # ===== ASET (DEBIT) =====
+        (1, 8500000, 0),     # Kas (101) - Debit
+        (2, 4500000, 0),     # Piutang Usaha (102) - Debit
+        (3, 500000, 0),      # Peralatan Tambak (103) - Debit
+        (4, 300000, 0),      # Perlengkapan (104) - Debit
+        (5, 1200000, 0),     # Persediaan - Tiram Kecil (105) - Debit
+        (6, 1750000, 0),     # Persediaan - Tiram Besar (106) - Debit
+        (7, 12000000, 0),    # Kendaraan (107) - Debit
+        
+        # ===== KONTRA ASET (CREDIT) =====
+        (8, 0, 1500000),     # Akumulasi Penyusutan Kendaraan (108) - Credit
+        
+        # ===== KEWAJIBAN (CREDIT) =====
+        (9, 0, 650000),      # Utang Usaha (201) - Credit
+        (10, 0, 100000),     # Utang Gaji (202) - Credit
+        
+        # ===== EKUITAS (CREDIT) =====
+        (11, 0, 22300000),   # Modal Pemilik (301) - Credit
+        
+        # ===== PENDAPATAN (CREDIT) =====
+        (12, 0, 4000000),    # Penjualan - Tiram Besar (401) - Credit
+        (13, 0, 3000000),    # Penjualan - Tiram Kecil (402) - Credit
+        
+        # ===== BEBAN (DEBIT) =====
+        (14, 1000000, 0),    # HPP - Tiram Kecil (501) - Debit
+        (15, 1500000, 0),    # HPP - Tiram Besar (502) - Debit
+        (16, 300000, 0),     # Beban Gaji (503) - Debit
+    ]
+    
+    # Insert saldo awal yang sudah dikoreksi
+    for account_id, debit_amount, credit_amount in opening_balances_corrected:
+        cur.execute('''
+            INSERT INTO opening_balances (account_id, debit_amount, credit_amount) 
+            VALUES (?, ?, ?)
+        ''', (account_id, debit_amount, credit_amount))
+    
+    # Hitung total untuk verifikasi
+    total_debit = sum(balance[1] for balance in opening_balances_corrected)
+    total_credit = sum(balance[2] for balance in opening_balances_corrected)
+    
+    print(f"✅ SALDO AWAL DIPERBAIKI:")
+    print(f"📊 TOTAL DEBIT: {total_debit:,}")
+    print(f"📊 TOTAL CREDIT: {total_credit:,}")
+    print(f"📊 BALANCED: {total_debit == total_credit}")
+    print(f"📊 SELISIH: {abs(total_debit - total_credit):,}")
+    
+    db.commit()
+    return total_debit == total_credit
 
 def set_opening_balance(account_id, amount, balance_type):
     db = get_db()
@@ -7393,6 +7748,7 @@ def verify_balances():
     """
     
     return render_template_string(BASE_TEMPLATE, title='Verifikasi Saldo', body=body, user=current_user())
+
 
 
 
