@@ -388,41 +388,23 @@ def get_account_id(cur, code):
     result = cur.fetchone()
     return result["id"] if result else None
 
-def set_opening_balance(account_id, balance, balance_type):
-    """Set saldo awal untuk akun tertentu"""
+def set_opening_balance(account_id, amount, balance_type):
     db = get_db()
-    cur = db.cursor()
+    db.execute("DELETE FROM opening_balances WHERE account_id = ?", (account_id,))
     
-    try:
-        # Hapus saldo awal yang ada untuk akun ini
-        cur.execute('DELETE FROM opening_balances WHERE account_id = ?', (account_id,))
-        
-        # Insert saldo awal baru
-        cur.execute('''
-            INSERT INTO opening_balances (account_id, balance, balance_type)
-            VALUES (?, ?, ?)
-        ''', (account_id, abs(balance), balance_type))
-        
-        db.commit()
-        return True
-    except Exception as e:
-        db.rollback()
-        raise e
+    if balance_type == "Debit":
+        db.execute("""
+            INSERT INTO opening_balances (account_id, debit_amount, credit_amount)
+            VALUES (?, ?, 0)
+        """, (account_id, amount))
+    else:
+        db.execute("""
+            INSERT INTO opening_balances (account_id, debit_amount, credit_amount)
+            VALUES (?, 0, ?)
+        """, (account_id, amount))
+    
+    db.commit()
 
-def get_opening_balance(account_id):
-    """Dapatkan saldo awal untuk akun tertentu"""
-    cur = get_db().execute('''
-        SELECT balance, balance_type FROM opening_balances 
-        WHERE account_id = ?
-    ''', (account_id,))
-    result = cur.fetchone()
-    
-    if result:
-        if result['balance_type'] == 'Debit':
-            return result['balance']
-        else:
-            return -result['balance']
-    return 0
 
 def get_account_balance(account_id, include_adjustments=True, include_closing=True):
     """
@@ -851,20 +833,20 @@ def set_opening_balance(account_id, amount, balance_type):
     db.commit()
 
 def get_opening_balance(account_id):
-    """Dapatkan saldo awal untuk akun tertentu - VERSI DIPERBAIKI"""
-    cur = get_db().execute('''
-        SELECT balance, balance_type FROM opening_balances 
+    """Dapatkan saldo awal akun berdasarkan debit_amount dan credit_amount"""
+    cur = get_db().execute("""
+        SELECT debit_amount, credit_amount 
+        FROM opening_balances
         WHERE account_id = ?
-    ''', (account_id,))
-    result = cur.fetchone()
+    """, (account_id,))
     
-    if result:
-        # PERBAIKAN: Return dengan tanda yang benar
-        if result['balance_type'] == 'Debit':
-            return result['balance']  # Positif untuk debit
-        else:
-            return -result['balance']  # Negatif untuk kredit
-    return 0
+    row = cur.fetchone()
+    if not row:
+        return 0
+    
+    # debit normal = positif, kredit normal = negatif
+    return float(row["debit_amount"] or 0) - float(row["credit_amount"] or 0)
+
 
 def get_company_info():
     """Dapatkan informasi perusahaan dari pengaturan"""
@@ -7365,6 +7347,7 @@ def verify_balances():
     """
     
     return render_template_string(BASE_TEMPLATE, title='Verifikasi Saldo', body=body, user=current_user())
+
 
 
 
