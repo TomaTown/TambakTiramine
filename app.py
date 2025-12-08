@@ -3667,10 +3667,16 @@ def login():
         user=None
     )
 
+
 @app.route('/login/google')
 def login_google():
-    # URL callback: /auth/google/callback
-    redirect_uri = url_for('google_callback', _external=True)
+    # kalau jalan di domain production, paksa pakai https
+    if request.host.startswith("tiramine.my.id"):
+        redirect_uri = url_for('google_callback', _external=True, _scheme='https')
+    else:
+        # untuk lokal (127.0.0.1:5000) tetap pakai skema default (http)
+        redirect_uri = url_for('google_callback', _external=True)
+
     return google.authorize_redirect(redirect_uri)
 
 
@@ -7848,6 +7854,7 @@ def verify_balances():
     """
     
     return render_template_string(BASE_TEMPLATE, title='Verifikasi Saldo', body=body, user=current_user())
+
 
 
 
