@@ -73,14 +73,12 @@ def init_db():
     """Initialize database with proper context management"""
     print("🚀 Starting database initialization...")
     
-    # Use app context to ensure database connection stays open
     with app.app_context():
         db = get_db()
         cur = db.cursor()
         
         try:
             print("🗑️  Cleaning up existing tables...")
-            # HAPUS SEMUA TABEL DAN BUAT ULANG DENGAN STRUKTUR YANG BENAR
             cur.executescript('''
                 DROP TABLE IF EXISTS transaction_templates;
                 DROP TABLE IF EXISTS opening_balances;
@@ -96,7 +94,6 @@ def init_db():
             ''')
             
             print("📋 Creating tables...")
-            # Buat tabel users
             cur.execute('''
                 CREATE TABLE users (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -107,7 +104,6 @@ def init_db():
                 )
             ''')
             
-            # Buat tabel accounts (Chart of Accounts) - SESUAI NERACA SALDO AWAL
             cur.execute('''
                 CREATE TABLE accounts (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -120,7 +116,6 @@ def init_db():
                 )
             ''')
             
-            # Buat tabel journal_entries
             cur.execute('''
                 CREATE TABLE journal_entries (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -133,7 +128,6 @@ def init_db():
                 )
             ''')
             
-            # Buat tabel journal_lines
             cur.execute('''
                 CREATE TABLE journal_lines (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -147,7 +141,6 @@ def init_db():
                 )
             ''')
             
-            # Buat tabel adjusting_entries
             cur.execute('''
                 CREATE TABLE adjusting_entries (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -157,7 +150,6 @@ def init_db():
                 )
             ''')
             
-            # Buat tabel adjusting_lines
             cur.execute('''
                 CREATE TABLE adjusting_lines (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -171,7 +163,6 @@ def init_db():
                 )
             ''')
             
-            # Buat tabel inventory
             cur.execute('''
                 CREATE TABLE inventory (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -185,7 +176,6 @@ def init_db():
                 )
             ''')
             
-            # Buat tabel settings
             cur.execute('''
                 CREATE TABLE settings (
                     k TEXT PRIMARY KEY,
@@ -193,7 +183,6 @@ def init_db():
                 )
             ''')
             
-            # Buat tabel opening_balances dengan struktur yang BENAR
             cur.execute('''
                 CREATE TABLE opening_balances (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -205,7 +194,6 @@ def init_db():
                 )
             ''')
             
-            # Buat tabel untuk OTP verification
             cur.execute('''
                 CREATE TABLE otp_verification (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -217,7 +205,6 @@ def init_db():
                 )
             ''')
             
-            # Insert default settings
             cur.execute('''
                 INSERT INTO settings (k, v) VALUES 
                 ('company_name', 'Peternakan Tiram Tiramine'),
@@ -228,9 +215,7 @@ def init_db():
             ''')
             
             print("👤 Creating default accounts...")
-            # DATA DEFAULT - BUAT SEMUA AKUN SESUAI NERACA SALDO AWAL ANDA
             accounts = [
-                # ===== ASET =====
                 ('101', 'Kas', 'Asset', 'Debit', 'Kas perusahaan'),
                 ('102', 'Piutang Usaha', 'Asset', 'Debit', 'Piutang dari pelanggan'),
                 ('103', 'Peralatan Tambak', 'Asset', 'Debit', 'Peralatan untuk tambak tiram'),
@@ -242,31 +227,92 @@ def init_db():
                 ('109', 'Kendaraan', 'Asset', 'Debit', 'Kendaraan operasional'),
                 ('110', 'Akumulasi Penyusutan Kendaraan', 'Contra Asset', 'Credit', 'Akumulasi penyusutan kendaraan'),
                 
-                # ===== KEWAJIBAN =====
                 ('201', 'Utang Usaha', 'Liability', 'Credit', 'Utang kepada supplier'),
                 ('202', 'Utang Gaji', 'Liability', 'Credit', 'Utang gaji karyawan'),
                 
-                # ===== EKUITAS =====
                 ('301', 'Modal Pemilik (Tiramine Capital)', 'Equity', 'Credit', 'Modal pemilik perusahaan'),
                 ('302', 'Ikhtisar Laba Rugi', 'Equity', 'Credit', 'Ikhtisar laba rugi'),
                 ('303', 'Laba Ditahan', 'Equity', 'Credit', 'Laba yang ditahan'),
                 
-                # ===== PENDAPATAN =====
                 ('401', 'Penjualan - Tiram Besar', 'Revenue', 'Credit', 'Pendapatan penjualan tiram besar'),
                 ('402', 'Penjualan - Tiram Kecil', 'Revenue', 'Credit', 'Pendapatan penjualan tiram kecil'),
                 
-                # ===== BEBAN =====
                 ('501', 'HPP - Tiram Kecil', 'Expense', 'Debit', 'Harga pokok penjualan tiram kecil'),
                 ('502', 'HPP - Tiram Besar', 'Expense', 'Debit', 'Harga pokok penjualan tiram besar'),
                 ('503', 'Beban Gaji', 'Expense', 'Debit', 'Beban gaji karyawan'),
-                ('504', 'Beban Penyusutan Kendaraan', 'Expense', 'Debit', 'Beban Penyusutan Kendaraan')
+                ('504', 'Beban Penyusutan Kendaraan', 'Expense', 'Debit', 'Beban penyusutan kendaraan')
             ]
             
             for code, name, atype, normal, desc in accounts:
-                cur.execute('INSERT INTO accounts (code, name, acct_type, normal_balance, description) VALUES (?,?,?,?,?)', 
+                cur.execute("INSERT INTO accounts (code, name, acct_type, normal_balance, description) VALUES (?,?,?,?,?)",
                             (code, name, atype, normal, desc))
                 print(f"✅ Created account: {code} - {name}")
-            
+
+            # =========================================================
+            # 📌 SEED JURNAL PENUTUP (TIDAK MENGGANGGU JURNAL LAIN)
+            # =========================================================
+            print("📌 Seeding Closing Journal Entries...")
+
+            def acc(code):
+                cur.execute("SELECT id FROM accounts WHERE code = ?", (code,))
+                return cur.fetchone()["id"]
+
+            # --- 1) Closing Pendapatan ---
+            cur.execute("""
+                INSERT INTO journal_entries (date, description, posted, transaction_type)
+                VALUES ('2025-12-31', 'Penutupan Pendapatan', 1, 'Closing Entry')
+            """)
+            jid = cur.lastrowid
+
+            closing_1 = [
+                (acc("402"), 4350000, 0),
+                (acc("401"), 6640000, 0),
+                (acc("302"), 0, 10990000)
+            ]
+
+            for a, d, c in closing_1:
+                cur.execute("INSERT INTO journal_lines (entry_id, account_id, debit, credit) VALUES (?, ?, ?, ?)",
+                            (jid, a, d, c))
+
+            # --- 2) Closing Beban + HPP ---
+            cur.execute("""
+                INSERT INTO journal_entries (date, description, posted, transaction_type)
+                VALUES ('2025-12-31', 'Penutupan Beban dan HPP', 1, 'Closing Entry')
+            """)
+            jid = cur.lastrowid
+
+            closing_2 = [
+                (acc("302"), 6035000, 0),
+                (acc("502"), 0, 3215000),
+                (acc("501"), 0, 2180000),
+                (acc("503"), 0, 440000),
+                (acc("504"), 0, 200000)
+            ]
+
+            for a, d, c in closing_2:
+                cur.execute("INSERT INTO journal_lines (entry_id, account_id, debit, credit) VALUES (?, ?, ?, ?)",
+                            (jid, a, d, c))
+
+            # --- 3) Laba Bersih → Modal ---
+            cur.execute("""
+                INSERT INTO journal_entries (date, description, posted, transaction_type)
+                VALUES ('2025-12-31', 'Pemindahan Laba Bersih ke Modal', 1, 'Closing Entry')
+            """)
+            jid = cur.lastrowid
+
+            closing_3 = [
+                (acc("302"), 4955000, 0),
+                (acc("301"), 0, 4955000)
+            ]
+
+            for a, d, c in closing_3:
+                cur.execute("INSERT INTO journal_lines (entry_id, account_id, debit, credit) VALUES (?, ?, ?, ?)",
+                            (jid, a, d, c))
+
+            print("✅ Closing Journal Entries Seeded.")
+
+            db.commit()
+        
         except Exception as e:
             db.rollback()
             print(f"❌ Database initialization failed: {e}")
@@ -7347,6 +7393,7 @@ def verify_balances():
     """
     
     return render_template_string(BASE_TEMPLATE, title='Verifikasi Saldo', body=body, user=current_user())
+
 
 
 
