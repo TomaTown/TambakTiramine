@@ -42,14 +42,13 @@ google = oauth.register(
     name='google',
     client_id=os.getenv("GOOGLE_CLIENT_ID"),
     client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
-    # ambil jwks_uri, authorize_url, token_url, dll dari metadata
     server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
-    # base URL untuk panggil endpoint seperti 'userinfo'
     api_base_url="https://openidconnect.googleapis.com/v1/",
     client_kwargs={
         "scope": "openid email profile",
     },
 )
+
 
 # ---------- Helper Database ----------
 
@@ -7849,6 +7848,7 @@ def verify_balances():
     """
     
     return render_template_string(BASE_TEMPLATE, title='Verifikasi Saldo', body=body, user=current_user())
+
 
 
 
