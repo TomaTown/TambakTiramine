@@ -22,7 +22,6 @@ import os
 import atexit
 import signal
 import sys
-import resend
 from flask_sqlalchemy import SQLAlchemy
 import os
 
@@ -7850,6 +7849,7 @@ def verify_balances():
     """
     
     return render_template_string(BASE_TEMPLATE, title='Verifikasi Saldo', body=body, user=current_user())
+
 
 
 
