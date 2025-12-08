@@ -1,4 +1,5 @@
-from flask import Flask, g, render_template_string, request, redirect, url_for, session, flash
+from flask import Flask, g, render_template_string, request, jsonify, redirect, url_for, session, flash
+from authlib.integrations.flask_client import OAuth
 import sqlite3
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -21,7 +22,8 @@ import os
 import atexit
 import signal
 import sys
-
+from flask_sqlalchemy import SQLAlchemy
+import os
 
 
 # Load environment variables from .env
@@ -32,6 +34,21 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-secret-tiramine')
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = SECRET_KEY
+
+# OAuth Google
+oauth = OAuth(app)
+
+google = oauth.register(
+    name='google',
+    client_id=os.getenv("GOOGLE_CLIENT_ID"),
+    client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
+    server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+    api_base_url="https://openidconnect.googleapis.com/v1/",
+    client_kwargs={
+        "scope": "openid email profile",
+    },
+)
+
 
 # ---------- Helper Database ----------
 
@@ -250,361 +267,6 @@ def init_db():
                             (code, name, atype, normal, desc))
                 print(f"✅ Created account: {code} - {name}")
             
-            # INSERT SALDO AWAL DEFAULT SESUAI NERACA SALDO AWAL ANDA
-            print("🔧 Setting up default opening balances...")
-            opening_balances = [
-                # Assets (Debit)
-                (1, 8500000, 0),    # Kas (101)
-                (2, 4500000, 0),    # Piutang Usaha (102)
-                (3, 500000, 0),     # Peralatan Tambak (103)
-                (4, 300000, 0),     # Perlengkapan (104)
-                (5, 1200000, 0),    # Persediaan - Tiram Kecil (105)
-                (6, 1750000, 0),    # Persediaan - Tiram Besar (106)
-                (7, 12000000, 0),   # Kendaraan (107)
-                
-                # Contra Asset (Credit)
-                (8, 0, 1500000),    # Akumulasi Penyusutan Kendaraan (108)
-                
-                # Liabilities (Credit)
-                (9, 0, 650000),     # Utang Usaha (201)
-                (10, 0, 100000),    # Utang Gaji (202)
-                
-                # Equity (Credit)
-                (11, 0, 22300000),  # Modal Pemilik (301)
-                
-                # Revenue (Credit) - dari penjualan
-                (12, 0, 4000000),   # Penjualan - Tiram Besar (401)
-                (13, 0, 3000000),   # Penjualan - Tiram Kecil (402)
-                
-                # Expenses (Debit) - dari HPP dan beban
-                (14, 1000000, 0),   # HPP - Tiram Kecil (501)
-                (15, 1500000, 0),   # HPP - Tiram Besar (502)
-                (16, 300000, 0),    # Beban Gaji (503)
-            ]
-            
-            for account_id, debit_amount, credit_amount in opening_balances:
-                cur.execute('''
-                    INSERT INTO opening_balances (account_id, debit_amount, credit_amount) 
-                    VALUES (?, ?, ?)
-                ''', (account_id, debit_amount, credit_amount))
-                print(f"✅ Set opening balance for account {account_id}: Debit={debit_amount:,}, Credit={credit_amount:,}")
-            
-            # Hitung total untuk verifikasi
-            total_debit = sum(balance[1] for balance in opening_balances)
-            total_credit = sum(balance[2] for balance in opening_balances)
-            print(f"📊 TOTAL DEBIT: {total_debit:,}")
-            print(f"📊 TOTAL CREDIT: {total_credit:,}")
-            print(f"📊 BALANCED: {total_debit == total_credit}")
-            
-            # Insert sample inventory data
-            cur.execute('''
-                INSERT INTO inventory (date, description, quantity_in, unit_cost, value)
-                VALUES 
-                ('2024-01-01', 'Stok awal tiram besar', 0, 55000, 0),
-                ('2024-01-01', 'Stok awal tiram kecil', 0, 30000, 0)
-            ''')
-            print("✅ Sample inventory data created!")
-
-            journal_data = [
-                {
-                    "date": "2024-12-01",
-                    "description": "Pembelian sarung tangan & keranjang",
-                    "reference": "JU-01",
-                    "transaction_type": "Umum",
-                    "lines": [
-                        {"code": "103", "debit": 100000, "credit": 0, "line_desc": "Peralatan"},
-                        {"code": "101", "debit": 0, "credit": 100000, "line_desc": "Kas"},
-                    ],
-                },
-                {
-                    "date": "2024-12-02",
-                    "description": "Pembelian alat panen",
-                    "reference": "JU-02",
-                    "transaction_type": "Umum",
-                    "lines": [
-                        {"code": "103", "debit": 50000, "credit": 0, "line_desc": "Peralatan"},
-                        {"code": "101", "debit": 0, "credit": 50000, "line_desc": "Kas"},
-                    ],
-                },
-                {
-                    "date": "2024-12-03",
-                    "description": "Pembelian tali",
-                    "reference": "JU-03A",
-                    "transaction_type": "Umum",
-                    "lines": [
-                        {"code": "103", "debit": 25000, "credit": 0, "line_desc": "Peralatan"},
-                        {"code": "101", "debit": 0, "credit": 25000, "line_desc": "Kas"},
-                    ],
-                },
-                {
-                    "date": "2024-12-03",
-                    "description": "Pembelian benih tiram kecil dan besar",
-                    "reference": "JU-03B",
-                    "transaction_type": "Umum",
-                    "lines": [
-                        {"code": "107", "debit": 140000, "credit": 0, "line_desc": "Persediaan benih kecil"},
-                        {"code": "108", "debit": 280000, "credit": 0, "line_desc": "Persediaan benih besar"},
-                        {"code": "101", "debit": 0, "credit": 420000, "line_desc": "Kas"},
-                    ],
-                },
-                {
-                    "date": "2024-12-04",
-                    "description": "Pembelian timbangan",
-                    "reference": "JU-04A",
-                    "transaction_type": "Umum",
-                    "lines": [
-                        {"code": "103", "debit": 100000, "credit": 0, "line_desc": "Peralatan"},
-                        {"code": "101", "debit": 0, "credit": 100000, "line_desc": "Kas"},
-                    ],
-                },
-                {
-                    "date": "2024-12-04",
-                    "description": "Pembelian plastik",
-                    "reference": "JU-04B",
-                    "transaction_type": "Umum",
-                    "lines": [
-                        {"code": "104", "debit": 30000, "credit": 0, "line_desc": "Perlengkapan"},
-                        {"code": "101", "debit": 0, "credit": 30000, "line_desc": "Kas"},
-                    ],
-                },
-                {
-                    "date": "2024-12-05",
-                    "description": "Penjualan tunai tiram besar 8 kg × 55.000",
-                    "reference": "JU-05",
-                    "transaction_type": "Penjualan",
-                    "lines": [
-                        {"code": "101", "debit": 440000, "credit": 0, "line_desc": "Kas"},
-                        {"code": "401", "debit": 0, "credit": 440000, "line_desc": "Penjualan - Tiram Besar"},
-                    ],
-                },
-                {
-                    "date": "2024-12-07",
-                    "description": "Penjualan kredit tiram kecil 9 kg × 30.000",
-                    "reference": "JU-06",
-                    "transaction_type": "Penjualan",
-                    "lines": [
-                        {"code": "102", "debit": 270000, "credit": 0, "line_desc": "Piutang Usaha"},
-                        {"code": "402", "debit": 0, "credit": 270000, "line_desc": "Penjualan - Tiram Kecil"},
-                    ],
-                },
-                {
-                    "date": "2024-12-10",
-                    "description": "Penjualan tunai tiram besar 6 kg × 55.000",
-                    "reference": "JU-07",
-                    "transaction_type": "Penjualan",
-                    "lines": [
-                        {"code": "101", "debit": 330000, "credit": 0, "line_desc": "Kas"},
-                        {"code": "401", "debit": 0, "credit": 330000, "line_desc": "Penjualan - Tiram Besar"},
-                    ],
-                },
-                {
-                    "date": "2024-12-12",
-                    "description": "Penjualan kredit tiram kecil 7 kg × 30.000",
-                    "reference": "JU-08",
-                    "transaction_type": "Penjualan",
-                    "lines": [
-                        {"code": "102", "debit": 210000, "credit": 0, "line_desc": "Piutang Usaha"},
-                        {"code": "402", "debit": 0, "credit": 210000, "line_desc": "Penjualan - Tiram Kecil"},
-                    ],
-                },
-                {
-                    "date": "2024-12-14",
-                    "description": "Pembayaran gaji karyawan 1",
-                    "reference": "JU-09",
-                    "transaction_type": "Umum",
-                    "lines": [
-                        {"code": "503", "debit": 70000, "credit": 0, "line_desc": "Beban Gaji"},
-                        {"code": "101", "debit": 0, "credit": 70000, "line_desc": "Kas"},
-                    ],
-                },
-                {
-                    "date": "2024-12-15",
-                    "description": "Penjualan tunai tiram besar 11 kg × 55.000",
-                    "reference": "JU-10",
-                    "transaction_type": "Penjualan",
-                    "lines": [
-                        {"code": "101", "debit": 605000, "credit": 0, "line_desc": "Kas"},
-                        {"code": "401", "debit": 0, "credit": 605000, "line_desc": "Penjualan - Tiram Besar"},
-                    ],
-                },
-                {
-                    "date": "2024-12-18",
-                    "description": "Pelunasan piutang transaksi 07/12",
-                    "reference": "JU-11",
-                    "transaction_type": "Penagihan",
-                    "lines": [
-                        {"code": "101", "debit": 270000, "credit": 0, "line_desc": "Kas"},
-                        {"code": "102", "debit": 0, "credit": 270000, "line_desc": "Piutang Usaha"},
-                    ],
-                },
-                {
-                    "date": "2024-12-19",
-                    "description": "Pembelian plastik",
-                    "reference": "JU-12",
-                    "transaction_type": "Umum",
-                    "lines": [
-                        {"code": "104", "debit": 30000, "credit": 0, "line_desc": "Perlengkapan"},
-                        {"code": "101", "debit": 0, "credit": 30000, "line_desc": "Kas"},
-                    ],
-                },
-                {
-                    "date": "2024-12-20",
-                    "description": "Penjualan kredit tiram kecil 10 kg × 30.000",
-                    "reference": "JU-13",
-                    "transaction_type": "Penjualan",
-                    "lines": [
-                        {"code": "102", "debit": 300000, "credit": 0, "line_desc": "Piutang Usaha"},
-                        {"code": "402", "debit": 0, "credit": 300000, "line_desc": "Penjualan - Tiram Kecil"},
-                    ],
-                },
-                {
-                    "date": "2024-12-21",
-                    "description": "Penjualan tunai tiram besar 7 kg × 55.000",
-                    "reference": "JU-14",
-                    "transaction_type": "Penjualan",
-                    "lines": [
-                        {"code": "101", "debit": 385000, "credit": 0, "line_desc": "Kas"},
-                        {"code": "401", "debit": 0, "credit": 385000, "line_desc": "Penjualan - Tiram Besar"},
-                    ],
-                },
-                {
-                    "date": "2024-12-23",
-                    "description": "Penjualan kredit tiram kecil 5 kg × 30.000",
-                    "reference": "JU-15",
-                    "transaction_type": "Penjualan",
-                    "lines": [
-                        {"code": "102", "debit": 150000, "credit": 0, "line_desc": "Piutang Usaha"},
-                        {"code": "402", "debit": 0, "credit": 150000, "line_desc": "Penjualan - Tiram Kecil"},
-                    ],
-                },
-                {
-                    "date": "2024-12-24",
-                    "description": "Pelunasan piutang transaksi 12/12",
-                    "reference": "JU-16",
-                    "transaction_type": "Penagihan",
-                    "lines": [
-                        {"code": "101", "debit": 210000, "credit": 0, "line_desc": "Kas"},
-                        {"code": "102", "debit": 0, "credit": 210000, "line_desc": "Piutang Usaha"},
-                    ],
-                },
-                {
-                    "date": "2024-12-26",
-                    "description": "Penjualan tunai tiram besar 5 kg × 55.000",
-                    "reference": "JU-17",
-                    "transaction_type": "Penjualan",
-                    "lines": [
-                        {"code": "101", "debit": 275000, "credit": 0, "line_desc": "Kas"},
-                        {"code": "401", "debit": 0, "credit": 275000, "line_desc": "Penjualan - Tiram Besar"},
-                    ],
-                },
-                {
-                    "date": "2024-12-27",
-                    "description": "Penjualan tunai tiram besar 4 kg × 55.000",
-                    "reference": "JU-18",
-                    "transaction_type": "Penjualan",
-                    "lines": [
-                        {"code": "101", "debit": 220000, "credit": 0, "line_desc": "Kas"},
-                        {"code": "401", "debit": 0, "credit": 220000, "line_desc": "Penjualan - Tiram Besar"},
-                    ],
-                },
-                {
-                    "date": "2024-12-28",
-                    "description": "Penjualan kredit tiram kecil 8 kg × 30.000",
-                    "reference": "JU-19A",
-                    "transaction_type": "Penjualan",
-                    "lines": [
-                        {"code": "102", "debit": 240000, "credit": 0, "line_desc": "Piutang Usaha"},
-                        {"code": "402", "debit": 0, "credit": 240000, "line_desc": "Penjualan - Tiram Kecil"},
-                    ],
-                },
-                {
-                    "date": "2024-12-28",
-                    "description": "Penjualan kredit tiram besar 7 kg × 55.000",
-                    "reference": "JU-19B",
-                    "transaction_type": "Penjualan",
-                    "lines": [
-                        {"code": "102", "debit": 385000, "credit": 0, "line_desc": "Piutang Usaha"},
-                        {"code": "401", "debit": 0, "credit": 385000, "line_desc": "Penjualan - Tiram Besar"},
-                    ],
-                },
-                {
-                    "date": "2024-12-29",
-                    "description": "Pelunasan piutang transaksi 20/12",
-                    "reference": "JU-20",
-                    "transaction_type": "Penagihan",
-                    "lines": [
-                        {"code": "101", "debit": 300000, "credit": 0, "line_desc": "Kas"},
-                        {"code": "102", "debit": 0, "credit": 300000, "line_desc": "Piutang Usaha"},
-                    ],
-                },
-                {
-                    "date": "2024-12-29",
-                    "description": "Pengakuan gaji karyawan (belum dibayar)",
-                    "reference": "JU-21",
-                    "transaction_type": "Penyesuaian",
-                    "lines": [
-                        {"code": "503", "debit": 70000, "credit": 0, "line_desc": "Beban Gaji"},
-                        {"code": "202", "debit": 0, "credit": 70000, "line_desc": "Utang Gaji"},
-                    ],
-                },
-                {
-                    "date": "2024-12-30",
-                    "description": "Penjualan tunai tiram kecil 6 kg × 30.000",
-                    "reference": "JU-22A",
-                    "transaction_type": "Penjualan",
-                    "lines": [
-                        {"code": "101", "debit": 180000, "credit": 0, "line_desc": "Kas"},
-                        {"code": "402", "debit": 0, "credit": 180000, "line_desc": "Penjualan - Tiram Kecil"},
-                    ],
-                },
-                {
-                    "date": "2024-12-30",
-                    "description": "Pelunasan piutang transaksi 23/12",
-                    "reference": "JU-22B",
-                    "transaction_type": "Penagihan",
-                    "lines": [
-                        {"code": "101", "debit": 150000, "credit": 0, "line_desc": "Kas"},
-                        {"code": "102", "debit": 0, "credit": 150000, "line_desc": "Piutang Usaha"},
-                    ],
-                },
-            ]
-
-            # Insert ke tabel journal_entries dan journal_lines
-            for entry in journal_data:
-                cur.execute('''
-                    INSERT INTO journal_entries (date, description, reference, transaction_type, posted)
-                    VALUES (?, ?, ?, ?, 1)
-                ''', (
-                    entry["date"],
-                    entry["description"],
-                    entry["reference"],
-                    entry["transaction_type"],
-                ))
-                entry_id = cur.lastrowid
-
-                for line in entry["lines"]:
-                    cur.execute('''
-                        INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
-                        VALUES (
-                            ?,
-                            (SELECT id FROM accounts WHERE code = ?),
-                            ?, ?, ?
-                        )
-                    ''', (
-                        entry_id,
-                        line["code"],
-                        line["debit"],
-                        line["credit"],
-                        line["line_desc"],
-                    ))
-
-            print("✅ All journal entries inserted successfully!")
-            
-            db.commit()
-            print("🎉 Database initialization completed successfully!")
-            print("💡 Access /trial_balance to verify the opening balances")
-
-            
         except Exception as e:
             db.rollback()
             print(f"❌ Database initialization failed: {e}")
@@ -726,66 +388,6 @@ def get_account_id(cur, code):
     result = cur.fetchone()
     return result["id"] if result else None
 
-def fix_opening_balances():
-    """Memperbaiki saldo awal agar sesuai dengan prinsip akuntansi"""
-    db = get_db()
-    cur = db.cursor()
-    
-    # Hapus semua saldo awal yang ada
-    cur.execute('DELETE FROM opening_balances')
-    
-    # DATA SALDO AWAL YANG BENAR - SESUAI DENGAN NERACA SALDO AWAL
-    # Total harus balance: Debit = Credit = Rp 31.550.000
-    opening_balances_corrected = [
-        # ===== ASET (DEBIT) =====
-        (1, 8500000, 0),     # Kas (101) - Debit
-        (2, 4500000, 0),     # Piutang Usaha (102) - Debit
-        (3, 500000, 0),      # Peralatan Tambak (103) - Debit
-        (4, 300000, 0),      # Perlengkapan (104) - Debit
-        (5, 1200000, 0),     # Persediaan - Tiram Kecil (105) - Debit
-        (6, 1750000, 0),     # Persediaan - Tiram Besar (106) - Debit
-        (7, 12000000, 0),    # Kendaraan (107) - Debit
-        
-        # ===== KONTRA ASET (CREDIT) =====
-        (8, 0, 1500000),     # Akumulasi Penyusutan Kendaraan (108) - Credit
-        
-        # ===== KEWAJIBAN (CREDIT) =====
-        (9, 0, 650000),      # Utang Usaha (201) - Credit
-        (10, 0, 100000),     # Utang Gaji (202) - Credit
-        
-        # ===== EKUITAS (CREDIT) =====
-        (11, 0, 22300000),   # Modal Pemilik (301) - Credit
-        
-        # ===== PENDAPATAN (CREDIT) =====
-        (12, 0, 4000000),    # Penjualan - Tiram Besar (401) - Credit
-        (13, 0, 3000000),    # Penjualan - Tiram Kecil (402) - Credit
-        
-        # ===== BEBAN (DEBIT) =====
-        (14, 1000000, 0),    # HPP - Tiram Kecil (501) - Debit
-        (15, 1500000, 0),    # HPP - Tiram Besar (502) - Debit
-        (16, 300000, 0),     # Beban Gaji (503) - Debit
-    ]
-    
-    # Insert saldo awal yang sudah dikoreksi
-    for account_id, debit_amount, credit_amount in opening_balances_corrected:
-        cur.execute('''
-            INSERT INTO opening_balances (account_id, debit_amount, credit_amount) 
-            VALUES (?, ?, ?)
-        ''', (account_id, debit_amount, credit_amount))
-    
-    # Hitung total untuk verifikasi
-    total_debit = sum(balance[1] for balance in opening_balances_corrected)
-    total_credit = sum(balance[2] for balance in opening_balances_corrected)
-    
-    print(f"✅ SALDO AWAL DIPERBAIKI:")
-    print(f"📊 TOTAL DEBIT: {total_debit:,}")
-    print(f"📊 TOTAL CREDIT: {total_credit:,}")
-    print(f"📊 BALANCED: {total_debit == total_credit}")
-    print(f"📊 SELISIH: {abs(total_debit - total_credit):,}")
-    
-    db.commit()
-    return total_debit == total_credit
-
 def set_opening_balance(account_id, balance, balance_type):
     """Set saldo awal untuk akun tertentu"""
     db = get_db()
@@ -822,66 +424,75 @@ def get_opening_balance(account_id):
             return -result['balance']
     return 0
 
-def get_account_balance(account_id, include_adjustments=True):
-    """Mendapatkan saldo akun dengan benar - VERSI DIPERBAIKI"""
+def get_account_balance(account_id, include_adjustments=True, include_closing=True):
+    """
+    Hitung saldo akhir akun:
+    saldo awal (opening_balances)
+    + jurnal biasa (journal_entries + journal_lines, posted=1)
+    + jurnal penyesuaian (adjusting_entries + adjusting_lines)
+    + (opsional) jurnal penutup yang sudah diposting sebagai journal_entries bertipe 'Closing Entry'
+    """
+
     db = get_db()
-    
-    # Dapatkan informasi akun
-    account_cur = db.execute('SELECT * FROM accounts WHERE id = ?', (account_id,))
-    account = account_cur.fetchone()
-    if not account:
-        return 0
-    
-    # 1. Dapatkan saldo awal - PERBAIKAN: gunakan struktur baru dengan benar
-    opening_cur = db.execute(
-        'SELECT debit_amount, credit_amount FROM opening_balances WHERE account_id = ?', 
-        (account_id,)
-    )
-    opening = opening_cur.fetchone()
-    
-    opening_balance = 0
-    if opening:
-        # Sesuai dengan jenis akun, hitung saldo awal
-        if account['normal_balance'] == 'Debit':
-            opening_balance = opening['debit_amount'] - opening['credit_amount']
-        else:
-            opening_balance = opening['credit_amount'] - opening['debit_amount']
-    
-    # 2. Hitung total dari jurnal
-    journal_cur = db.execute('''
-        SELECT COALESCE(SUM(debit), 0) as total_debit, 
-               COALESCE(SUM(credit), 0) as total_credit
-        FROM journal_lines 
+
+    # 1) SALDO AWAL
+    ob = db.execute("""
+        SELECT 
+            COALESCE(SUM(debit_amount), 0) AS ob_debit,
+            COALESCE(SUM(credit_amount), 0) AS ob_credit
+        FROM opening_balances
         WHERE account_id = ?
-    ''', (account_id,))
-    journal = journal_cur.fetchone()
-    
-    journal_net = 0
-    if account['normal_balance'] == 'Debit':
-        journal_net = journal['total_debit'] - journal['total_credit']
-    else:
-        journal_net = journal['total_credit'] - journal['total_debit']
-    
-    # 3. Hitung total dari penyesuaian (jika termasuk)
-    adjusting_net = 0
+    """, (account_id,)).fetchone()
+
+    opening = float(ob["ob_debit"] or 0) - float(ob["ob_credit"] or 0)
+
+    # 2) PERGERAKAN JURNAL BIASA (yang sudah diposting)
+    jl = db.execute("""
+        SELECT 
+            COALESCE(SUM(jl.debit), 0) AS jl_debit,
+            COALESCE(SUM(jl.credit), 0) AS jl_credit
+        FROM journal_lines jl
+        JOIN journal_entries je ON jl.entry_id = je.id
+        WHERE jl.account_id = ?
+          AND je.posted = 1
+    """, (account_id,)).fetchone()
+
+    journal_mov = float(jl["jl_debit"] or 0) - float(jl["jl_credit"] or 0)
+
+    # 3) JURNAL PENYESUAIAN (AYAT PENYESUAIAN)
     if include_adjustments:
-        adjusting_cur = db.execute('''
-            SELECT COALESCE(SUM(debit), 0) as total_debit, 
-                   COALESCE(SUM(credit), 0) as total_credit
-            FROM adjusting_lines 
-            WHERE account_id = ?
-        ''', (account_id,))
-        adjusting = adjusting_cur.fetchone()
-        
-        if account['normal_balance'] == 'Debit':
-            adjusting_net = adjusting['total_debit'] - adjusting['total_credit']
-        else:
-            adjusting_net = adjusting['total_credit'] - adjusting['total_debit']
-    
-    # Total saldo
-    total_balance = opening_balance + journal_net + adjusting_net
-    
-    return total_balance
+        adj = db.execute("""
+            SELECT 
+                COALESCE(SUM(al.debit), 0) AS ad_debit,
+                COALESCE(SUM(al.credit), 0) AS ad_credit
+            FROM adjusting_lines al
+            JOIN adjusting_entries ae ON al.adj_id = ae.id
+            WHERE al.account_id = ?
+        """, (account_id,)).fetchone()
+
+        adj_mov = float(adj["ad_debit"] or 0) - float(adj["ad_credit"] or 0)
+    else:
+        adj_mov = 0.0
+
+    # 4) (OPSIONAL) JURNAL PENUTUP YANG SUDAH DIPOSTING
+    closing_mov = 0.0
+    if include_closing:
+        closing = db.execute("""
+            SELECT 
+                COALESCE(SUM(jl.debit), 0) AS c_debit,
+                COALESCE(SUM(jl.credit), 0) AS c_credit
+            FROM journal_lines jl
+            JOIN journal_entries je ON jl.entry_id = je.id
+            WHERE jl.account_id = ?
+              AND je.transaction_type = 'Closing Entry'
+              AND je.posted = 1
+        """, (account_id,)).fetchone()
+
+        closing_mov = float(closing["c_debit"] or 0) - float(closing["c_credit"] or 0)
+
+    # SALDO AKHIR = SALDO AWAL + SEMUA PERGERAKAN
+    return opening + journal_mov + adj_mov + closing_mov
+
 
 def post_journal_entry(date, description, lines, reference="", transaction_type="General", template_key=None):
     """Posting entri jurnal dengan validasi yang diperbaiki"""
@@ -1570,138 +1181,314 @@ def cash_flow_statement():
         'net_cash_flow': net_cash_flow
     }
 
-def get_closing_entries():
-    """Buat entri jurnal penutup untuk menutup akun nominal (pendapatan dan beban)"""
+def generate_closing_entries():
     db = get_db()
-    cur = db.cursor()
-    
-    # Hitung total pendapatan dan beban
-    cur.execute('''
-        SELECT 
-            SUM(CASE WHEN a.code LIKE '4%' THEN jl.credit - jl.debit ELSE 0 END) as net_revenue,
-            SUM(CASE WHEN a.code LIKE '5%' THEN jl.debit - jl.credit ELSE 0 END) as net_expense
-        FROM journal_lines jl
-        JOIN accounts a ON jl.account_id = a.id
-    ''')
-    result = cur.fetchone()
-    
-    net_revenue = result['net_revenue'] or 0
-    net_expense = result['net_expense'] or 0
-    net_income = net_revenue - net_expense
-    
+
+    # Ambil semua akun pendapatan
+    pendapatan = db.execute("""
+        SELECT id, code, name, balance
+        FROM accounts
+        WHERE acct_type = 'Revenue'
+    """).fetchall()
+
+    # Ambil semua beban
+    beban = db.execute("""
+        SELECT id, code, name, balance
+        FROM accounts
+        WHERE acct_type = 'Expense'
+    """).fetchall()
+
     closing_entries = []
-    
-    # 1. Tutup akun pendapatan ke Ikhtisar Laba Rugi
-    if net_revenue > 0:
-        cur.execute('SELECT id FROM accounts WHERE code LIKE "4%" AND acct_type = "Revenue"')
-        revenue_accounts = cur.fetchall()
-        
-        for account in revenue_accounts:
-            account_balance = get_account_balance(account['id'])
-            if account_balance > 0:
-                closing_entries.append({
-                    'account_id': account['id'],
-                    'debit': 0,
-                    'credit': account_balance,
-                    'description': f'Penutupan pendapatan'
-                })
-    
-    # 2. Tutup akun beban ke Ikhtisar Laba Rugi
-    if net_expense > 0:
-        cur.execute('SELECT id FROM accounts WHERE code LIKE "5%" AND acct_type = "Expense"')
-        expense_accounts = cur.fetchall()
-        
-        for account in expense_accounts:
-            account_balance = get_account_balance(account['id'])
-            if account_balance > 0:
-                closing_entries.append({
-                    'account_id': account['id'],
-                    'debit': account_balance,
-                    'credit': 0,
-                    'description': f'Penutupan beban'
-                })
-    
-    # 3. Tutup Ikhtisar Laba Rugi ke Laba Ditahan
-    if net_income != 0:
-        # Cari akun Ikhtisar Laba Rugi atau Laba Ditahan
-        cur.execute('SELECT id FROM accounts WHERE code = "303" OR name LIKE "%Laba Ditahan%"')
-        retained_earnings = cur.fetchone()
-        
-        if retained_earnings:
-            if net_income > 0:
-                # Laba bersih - tambah ke Laba Ditahan
-                closing_entries.append({
-                    'account_id': retained_earnings['id'],
-                    'debit': 0,
-                    'credit': net_income,
-                    'description': f'Laba bersih periode berjalan'
-                })
-            else:
-                # Rugi bersih - kurangi dari Laba Ditahan
-                closing_entries.append({
-                    'account_id': retained_earnings['id'],
-                    'debit': abs(net_income),
-                    'credit': 0,
-                    'description': f'Rugi bersih periode berjalan'
-                })
-    
-    return closing_entries, net_income
+
+    # 1. Menutup pendapatan → pendapatan → ikhtisar laba rugi
+    total_pendapatan = 0
+    for p in pendapatan:
+        total_pendapatan += p['balance']
+        closing_entries.append({
+            'account_id': p['id'],
+            'debit': p['balance'],
+            'credit': 0,
+            'desc': 'Penutupan pendapatan'
+        })
+
+    closing_entries.append({
+        'account_id': get_account_id('302'),  # Ikhtisar Laba Rugi
+        'debit': 0,
+        'credit': total_pendapatan,
+        'desc': 'Penutupan pendapatan'
+    })
+
+
+    # 2. Menutup beban → ikhtisar laba rugi → beban
+    total_beban = 0
+    for b in beban:
+        total_beban += b['balance']
+        closing_entries.append({
+            'account_id': b['id'],
+            'debit': 0,
+            'credit': b['balance'],
+            'desc': 'Penutupan beban'
+        })
+
+    closing_entries.append({
+        'account_id': get_account_id('302'),  # Ikhtisar Laba Rugi
+        'debit': total_beban,
+        'credit': 0,
+        'desc': 'Penutupan beban'
+    })
+
+
+    # 3. Menutup saldo ikhtisar laba rugi ke modal
+    laba_bersih = total_pendapatan - total_beban
+
+    if laba_bersih > 0:
+        closing_entries.append({
+            'account_id': get_account_id('302'),
+            'debit': laba_bersih,
+            'credit': 0,
+            'desc': 'Laba bersih ke modal'
+        })
+        closing_entries.append({
+            'account_id': get_account_id('301'),  # Modal
+            'debit': 0,
+            'credit': laba_bersih,
+            'desc': 'Laba bersih ke modal'
+        })
+    else:
+        rugi = abs(laba_bersih)
+        closing_entries.append({
+            'account_id': get_account_id('301'),
+            'debit': rugi,
+            'credit': 0,
+            'desc': 'Rugi bersih ke modal'
+        })
+        closing_entries.append({
+            'account_id': get_account_id('302'),
+            'debit': 0,
+            'credit': rugi,
+            'desc': 'Rugi bersih ke modal'
+        })
+
+    return closing_entries
 
 def get_post_closing_trial_balance():
-    """Hasilkan neraca saldo setelah penutupan (hanya akun riil)"""
+    """Neraca saldo setelah penutupan (hanya akun riil: Asset, Liability, Equity)."""
     accounts = all_accounts()
     pctb_data = []
     total_debit = 0
     total_credit = 0
-    
+
     for account in accounts:
-        # Hanya akun riil (Asset, Liability, Equity) yang ada di neraca saldo penutup
-        if account['acct_type'] in ('Asset', 'Liability', 'Equity'):
-            balance = get_account_balance(account['id'], include_adjustments=True)
-            
-            if account['normal_balance'] == 'Debit':
+        # Hanya akun riil yang tampil di neraca saldo penutup
+        if account["acct_type"] in ("Asset", "Liability", "Equity"):
+            balance = get_account_balance(account["id"], include_adjustments=True)
+
+            if account["normal_balance"] == "Debit":
                 debit = balance if balance > 0 else 0
                 credit = -balance if balance < 0 else 0
             else:
                 debit = -balance if balance < 0 else 0
                 credit = balance if balance > 0 else 0
-            
-            pctb_data.append({
-                'account': account,
-                'debit': debit,
-                'credit': credit
-            })
-            
+
+            pctb_data.append(
+                {
+                    "account": account,
+                    "debit": debit,
+                    "credit": credit,
+                }
+            )
+
             total_debit += debit
             total_credit += credit
-    
+
     return pctb_data, total_debit, total_credit
 
+def get_account_id_by_code(code: str):
+    """Helper: dapatkan id akun dari kode akun (misal '401')."""
+    cur = get_db().execute("SELECT id FROM accounts WHERE code = ?", (code,))
+    row = cur.fetchone()
+    return row["id"] if row else None
+
+
+
+def get_closing_entries():
+    """
+    Bangun jurnal penutup otomatis dari saldo akun (setelah penyesuaian).
+
+    Pola:
+    1) Tutup pendapatan -> debit pendapatan, kredit Ikhtisar Laba Rugi (302)
+    2) Tutup beban      -> debit Ikhtisar Laba Rugi (302), kredit beban
+    3) Tutup laba/rugi bersih -> dari Ikhtisar (302) ke Modal (301)
+    """
+    db = get_db()
+
+    # Semua akun pendapatan
+    pendapatan = db.execute(
+        """
+        SELECT id, code, name
+        FROM accounts
+        WHERE acct_type = 'Revenue'
+        """
+    ).fetchall()
+
+    # Semua akun beban
+    beban = db.execute(
+        """
+        SELECT id, code, name
+        FROM accounts
+        WHERE acct_type = 'Expense'
+        """
+    ).fetchall()
+
+    closing_entries = []
+    total_pendapatan = 0
+    total_beban = 0
+
+    # ============================
+    # (1) PENUTUPAN PENDAPATAN
+    # ============================
+    for p in pendapatan:
+        saldo = get_account_balance(p["id"], include_adjustments=True)
+        if abs(saldo) > 0.005:  # abaikan saldo 0
+            total_pendapatan += saldo
+            closing_entries.append(
+                {
+                    "account_id": p["id"],
+                    "debit": saldo,
+                    "credit": 0,
+                    "description": "Penutupan pendapatan",
+                }
+            )
+
+    if abs(total_pendapatan) > 0.005:
+        closing_entries.append(
+            {
+                "account_id": get_account_id_by_code("302"),  # Ikhtisar Laba Rugi
+                "debit": 0,
+                "credit": total_pendapatan,
+                "description": "Penutupan pendapatan ke Ikhtisar Laba Rugi",
+            }
+        )
+
+
+    # ============================
+    # (2) PENUTUPAN BEBAN
+    # ============================
+    for b in beban:
+        saldo = get_account_balance(b["id"], include_adjustments=True)
+        if abs(saldo) > 0.005:
+            total_beban += saldo
+            closing_entries.append(
+                {
+                    "account_id": b["id"],
+                    "debit": 0,
+                    "credit": saldo,
+                    "description": "Penutupan beban",
+                }
+            )
+
+    if abs(total_beban) > 0.005:
+        closing_entries.append(
+            {
+                "account_id": get_account_id_by_code("302"),  # Ikhtisar Laba Rugi
+                "debit": total_beban,
+                "credit": 0,
+                "description": "Penutupan beban ke Ikhtisar Laba Rugi",
+            }
+        )
+
+
+    # ============================
+    # (3) LABA BERSIH → MODAL
+    # ============================
+    laba_bersih = total_pendapatan - total_beban
+
+    if laba_bersih > 0:  # Laba
+        closing_entries.append(
+            {
+                "account_id": get_account_id_by_code("302"),
+                "debit": laba_bersih,
+                "credit": 0,
+                "description": "Penutupan laba bersih",
+            }
+        )
+        closing_entries.append(
+            {
+                "account_id": get_account_id_by_code("301"),  # Modal
+                "debit": 0,
+                "credit": laba_bersih,
+                "description": "Pemindahan laba bersih ke modal",
+            }
+        )
+    elif laba_bersih < 0:  # Rugi
+        rugi = abs(laba_bersih)
+        closing_entries.append(
+            {
+                "account_id": get_account_id_by_code("301"),
+                "debit": rugi,
+                "credit": 0,
+                "description": "Pemindahan rugi bersih ke modal",
+            }
+        )
+        closing_entries.append(
+            {
+                "account_id": get_account_id_by_code("302"),
+                "debit": 0,
+                "credit": rugi,
+                "description": "Penutupan rugi bersih",
+            }
+        )
+
+    return closing_entries, laba_bersih
+
+
 def post_closing_entries():
-    """Posting entri jurnal penutup"""
+    """
+    Posting jurnal penutup ke tabel journal_entries & journal_lines.
+
+    Di-post sebagai **1 entri jurnal** dengan banyak baris
+    (di Excel/halaman bisa kamu tampilkan seperti contoh jurnal penutup).
+    """
     closing_entries, net_income = get_closing_entries()
-    
+
     if not closing_entries:
-        return None, 0
-    
+        return None, net_income
+
     db = get_db()
     cur = db.cursor()
-    
+
     try:
-        # Buat entri jurnal penutup
-        cur.execute('''
-            INSERT INTO journal_entries (date, description, reference, transaction_type, posted) 
+        # Buat satu entry jurnal 'Jurnal Penutup'
+        cur.execute(
+            """
+            INSERT INTO journal_entries (date, description, reference, transaction_type, posted)
             VALUES (?, ?, ?, ?, 1)
-        ''', (datetime.now().date().isoformat(), 'Jurnal Penutup - Akhir Periode', 'CLOSING', 'Closing Entry'))
+            """,
+            (
+                datetime.now().date().isoformat(),
+                "Jurnal Penutup - Akhir Periode",
+                "CLOSING",
+                "Closing Entry",
+            ),
+        )
         entry_id = cur.lastrowid
-        
-        # Tambahkan baris jurnal penutup
-        for entry in closing_entries:
-            cur.execute('''
-                INSERT INTO journal_lines (entry_id, account_id, debit, credit, description) 
+
+        # Baris-baris jurnal penutup
+        for line in closing_entries:
+            cur.execute(
+                """
+                INSERT INTO journal_lines (entry_id, account_id, debit, credit, description)
                 VALUES (?, ?, ?, ?, ?)
-            ''', (entry_id, entry['account_id'], entry.get('debit', 0), entry.get('credit', 0), entry.get('description', '')))
-        
+                """,
+                (
+                    entry_id,
+                    line["account_id"],
+                    float(line.get("debit", 0) or 0),
+                    float(line.get("credit", 0) or 0),
+                    line.get("description", ""),
+                ),
+            )
+
         db.commit()
         return entry_id, net_income
     except Exception as e:
@@ -3008,12 +2795,6 @@ BASE_TEMPLATE = """
                     </a>
                 </div>
                 <div class="nav-item">
-                    <a class="nav-link {{ 'active' if 'inventory' in request.endpoint }}" href="/inventory">
-                        <i class="fas fa-boxes"></i>
-                        <span>Monitoring Stok</span>
-                    </a>
-                </div>
-                <div class="nav-item">
                     <a class="nav-link {{ 'active' if 'journal' in request.endpoint }}" href="/journal">
                         <i class="fas fa-book"></i>
                         <span>Jurnal</span>
@@ -3372,8 +3153,8 @@ def login():
                         </form>
 
                         <div class="text-center mt-3">
-                            <a href="{{{{ url_for('login_google') }}}}" class="btn btn-danger w-100 mb-2">
-                                Login dengan Google
+                            <a href="/login/google" class="btn btn-outline-danger w-100 mt-2">
+                            <i class="fab fa-google me-2"></i> Login dengan Google
                             </a>
                             <a href="/otp/request" class="text-decoration-none d-block mb-2">
                                 <i class="fas fa-sms me-1"></i>Masuk menggunakan OTP
@@ -3396,6 +3177,53 @@ def login():
         body=body,
         user=None
     )
+
+
+@app.route('/login/google')
+def login_google():
+    # kalau jalan di domain production, paksa pakai https
+    if request.host.startswith("tiramine.my.id"):
+        redirect_uri = url_for('google_callback', _external=True, _scheme='https')
+    else:
+        # untuk lokal (127.0.0.1:5000) tetap pakai skema default (http)
+        redirect_uri = url_for('google_callback', _external=True)
+
+    return google.authorize_redirect(redirect_uri)
+
+
+@app.route('/auth/google/callback')
+def google_callback():
+    token = google.authorize_access_token()
+    userinfo = google.get('userinfo').json()
+
+    email = userinfo.get('email')
+    name = userinfo.get('name') or email.split('@')[0]
+
+    if not email:
+        flash('Gagal mengambil email dari Google.', 'danger')
+        return redirect(url_for('login'))
+
+    db = get_db()
+    # cek apakah user sudah ada
+    cur = db.execute('SELECT id, username FROM users WHERE email = ?', (email,))
+    user = cur.fetchone()
+
+    if user:
+        user_id = user['id']
+    else:
+        # kalau belum ada, buat user baru
+        # password_hash bisa dikosongkan karena login via Google
+        db.execute(
+            'INSERT INTO users (username, password_hash, email) VALUES (?, ?, ?)',
+            (name, '', email)
+        )
+        db.commit()
+        user_id = db.execute('SELECT last_insert_rowid() AS id').fetchone()['id']
+
+    # login-kan user
+    session['user_id'] = user_id
+    flash('Login dengan Google berhasil.', 'success')
+    return redirect(url_for('dashboard'))  # ganti ke halaman utama kamu
 
 
 @app.route('/otp/request', methods=['GET', 'POST'])
@@ -3698,7 +3526,6 @@ def dashboard():
                                 </button>
                                 <ul class="dropdown-menu">
                                     <li><a class="dropdown-item" href="/journal"><i class="fas fa-book me-2"></i>Lihat Jurnal</a></li>
-                                    <li><a class="dropdown-item" href="/inventory"><i class="fas fa-boxes me-2"></i>Monitoring Stok</a></li>
                                     <li><hr class="dropdown-divider"></li>
                                     <li><a class="dropdown-item" href="/financials"><i class="fas fa-chart-line me-2"></i>Laporan Keuangan</a></li>
                                 </ul>
@@ -3821,122 +3648,6 @@ def dashboard():
     """
 
     return render_template_string(BASE_TEMPLATE, title='Dashboard', body=dashboard_template, user=current_user())
-
-@app.route('/inventory')
-@login_required
-def inventory_monitoring():
-    """Halaman monitoring stok tiram besar dan kecil"""
-    current_stock = get_current_stock()
-    
-    # Dapatkan riwayat persediaan
-    cur = get_db().execute('''
-        SELECT date, description, quantity_in, quantity_out, unit_cost, value
-        FROM inventory 
-        ORDER BY date DESC, id DESC
-        LIMIT 20
-    ''')
-    inventory_history = cur.fetchall()
-    
-    body = f"""
-    <div class="page-header">
-        <h1 class="page-title">Monitoring Persediaan Tiram</h1>
-        <p class="page-subtitle">Kelola dan pantau stok tiram besar & kecil</p>
-    </div>
-    
-    <div class="row mb-4">
-        <!-- Stok Tiram Besar -->
-        <div class="col-md-4">
-            <div class="card">
-                <div class="card-body text-center">
-                    <div class="stat-icon bg-primary text-white mx-auto mb-3">
-                        <i class="fas fa-water"></i>
-                    </div>
-                    <h3 class="text-primary">{current_stock['large']}</h3>
-                    <h6 class="text-dark">Tiram Besar</h6>
-                    <small class="text-muted">Stok tersedia</small>
-                    <div class="mt-2">
-                        <span class="badge bg-primary">Rp 55.000/tiram</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Stok Tiram Kecil -->
-        <div class="col-md-4">
-            <div class="card">
-                <div class="card-body text-center">
-                    <div class="stat-icon bg-success text-white mx-auto mb-3">
-                        <i class="fas fa-tint"></i>
-                    </div>
-                    <h3 class="text-success">{current_stock['small']}</h3>
-                    <h6 class="text-dark">Tiram Kecil</h6>
-                    <small class="text-muted">Stok tersedia</small>
-                    <div class="mt-2">
-                        <span class="badge bg-success">Rp 30.000/tiram</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Total Stok -->
-        <div class="col-md-4">
-            <div class="card">
-                <div class="card-body text-center">
-                    <div class="stat-icon bg-info text-white mx-auto mb-3">
-                        <i class="fas fa-boxes"></i>
-                    </div>
-                    <h3 class="text-info">{current_stock['total']}</h3>
-                    <h6 class="text-dark">Total Stok</h6>
-                    <small class="text-muted">Keseluruhan persediaan</small>
-                    <div class="mt-2">
-                        <span class="badge bg-info">Nilai total</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <div class="card">
-        <div class="card-header">
-            <h5 class="mb-0"><i class="fas fa-history me-2"></i>Riwayat Persediaan</h5>
-        </div>
-        <div class="card-body">
-            <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead>
-                        <tr>
-                            <th>Tanggal</th>
-                            <th>Keterangan</th>
-                            <th class="text-center">Masuk</th>
-                            <th class="text-center">Keluar</th>
-                            <th class="text-end">Harga Satuan</th>
-                            <th class="text-end">Nilai</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-    """
-    
-    for item in inventory_history:
-        body += f"""
-                        <tr>
-                            <td>{item['date']}</td>
-                            <td>{item['description']}</td>
-                            <td class="text-center text-success">{int(item['quantity_in']) if item['quantity_in'] else ''}</td>
-                            <td class="text-center text-danger">{int(item['quantity_out']) if item['quantity_out'] else ''}</td>
-                            <td class="text-end">{item['unit_cost']:,.0f}</td>
-                            <td class="text-end fw-bold">{item['value']:,.0f}</td>
-                        </tr>
-        """
-    
-    body += """
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-    """
-    
-    return render_template_string(BASE_TEMPLATE, title='Monitoring Persediaan', body=body, user=current_user())
 
 @app.route('/journal')
 @login_required
@@ -4247,11 +3958,10 @@ def api_accounts():
         ]
     }
 
+
 @app.route('/api/refresh_data')
 @login_required
 def refresh_data():
-    """Manual refresh semua data"""
-    clear_all_caches()
     return jsonify({'success': True, 'message': 'Data telah di-refresh'})
 
 @app.route('/journal/new', methods=['GET', 'POST'])
@@ -4891,6 +4601,28 @@ def trial_balance_view():
     is_balanced_adj = abs(atd - atc) < 0.01
     balance_status_adj = "✅ SEIMBANG" if is_balanced_adj else f"❌ TIDAK SEIMBANG (Selisih: Rp {abs(atd - atc):,.2f})"
     
+    body += f"""
+                            </tbody>
+                            <tfoot class="table-active">
+                                <tr>
+                                    <th>Total</th>
+                                    <th class="text-end text-success">Rp {atd:,.2f}</th>
+                                    <th class="text-end text-danger">Rp {atc:,.2f}</th>
+                                </tr>
+                                <tr>
+                                    <th colspan="3" class="text-center {'text-success' if is_balanced_adj else 'text-danger'}">
+                                        <i class="fas {'fa-check-circle' if is_balanced_adj else 'fa-exclamation-triangle'} me-2"></i>
+                                        {balance_status_adj}
+                                    </th>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    """
+ 
     body += """
     <div class="row mt-4">
         <div class="col-12">
@@ -5136,6 +4868,80 @@ def adjusting_new():
     </script>
     """
     return render_template_string(BASE_TEMPLATE, title='Ayat Penyesuaian Baru', body=body, user=current_user())
+
+@app.route("/adjusting/auto_excel")
+@login_required
+def adjusting_auto_excel():
+    """Generate ayat penyesuaian sesuai file Excel (penyusutan + HPP & persediaan)."""
+    db = get_db()
+    cur = db.cursor()
+
+    # helper cari id akun dari kode
+    def acc(code: str) -> int:
+        row = cur.execute("SELECT id FROM accounts WHERE code = ?", (code,)).fetchone()
+        if not row:
+            raise Exception(f"Akun dengan kode {code} tidak ditemukan")
+        return row["id"]
+
+    # ===== 1. PENYESUAIAN PENYUSUTAN KENDARAAN =====
+    lines_penyusutan = [
+        {
+            "account_id": acc("504"),  # Beban Penyusutan Kendaraan
+            "debit": 200_000,
+            "credit": 0,
+            "description": "Penyesuaian penyusutan kendaraan"
+        },
+        {
+            "account_id": acc("110"),  # Akumulasi Penyusutan Kendaraan
+            "debit": 0,
+            "credit": 200_000,
+            "description": "Penyesuaian penyusutan kendaraan"
+        },
+    ]
+
+    post_adjusting_entry(
+        date="2024-12-31",
+        description="Ayat Penyesuaian - Penyusutan Kendaraan",
+        lines=lines_penyusutan,
+    )
+
+    # ===== 2. PENYESUAIAN HPP & PERSEDIAAN TIRAM =====
+    lines_hpp_persediaan = [
+        {
+            "account_id": acc("501"),  # HPP - Tiram Kecil
+            "debit": 1_180_000,
+            "credit": 0,
+            "description": "Penyesuaian HPP Tiram Kecil"
+        },
+        {
+            "account_id": acc("105"),  # Persediaan - Tiram Kecil
+            "debit": 0,
+            "credit": 1_180_000,
+            "description": "Penyesuaian Persediaan Tiram Kecil"
+        },
+        {
+            "account_id": acc("502"),  # HPP - Tiram Besar
+            "debit": 1_715_000,
+            "credit": 0,
+            "description": "Penyesuaian HPP Tiram Besar"
+        },
+        {
+            "account_id": acc("106"),  # Persediaan - Tiram Besar
+            "debit": 0,
+            "credit": 1_715_000,
+            "description": "Penyesuaian Persediaan Tiram Besar"
+        },
+    ]
+
+    post_adjusting_entry(
+        date="2024-12-31",
+        description="Ayat Penyesuaian - HPP & Persediaan Tiram",
+        lines=lines_hpp_persediaan,
+    )
+
+    flash("Ayat penyesuaian dari Excel berhasil dimasukkan.")
+    return redirect(url_for("adjusting"))
+
 
 @app.route('/adjusting/<int:entry_id>')
 @login_required
@@ -5850,202 +5656,178 @@ def opening_balance():
 @login_required
 def closing_entries():
     """Halaman jurnal penutup dan neraca saldo penutup"""
-    
-    # Dapatkan entri penutup yang akan diposting
+
+    # Hitung jurnal penutup (belum tentu sudah diposting)
     closing_entries_list, net_income = get_closing_entries()
-    
-    # Dapatkan neraca saldo penutup
+
+    # Kalau mau sekalian AUTO-POST begitu dibuka, biarkan baris ini.
+    # Kalau maunya manual (pakai tombol), hapus 3 baris di bawah.
+    if closing_entries_list:
+        post_closing_entries()
+
+    # Neraca saldo penutup (setelah penyesuaian + penutup)
     pctb_data, pctb_debit, pctb_credit = get_post_closing_trial_balance()
-    
+
     body = f"""
     <div class="page-header">
         <h1 class="page-title">Jurnal Penutup & Neraca Saldo Penutup</h1>
-        <p class="page-subtitle">Proses penutupan periode akuntansi</p>
+        <p class="page-subtitle">Format mirip dengan template Excel yang kamu buat.</p>
     </div>
-    
+
     <div class="row">
+        <!-- KIRI: Jurnal Penutup -->
         <div class="col-lg-6">
             <div class="card">
                 <div class="card-header bg-warning text-dark">
-                    <h5 class="mb-0"><i class="fas fa-lock me-2"></i>Jurnal Penutup</h5>
+                    <h5 class="mb-0"><i class="fas fa-book me-2"></i>Jurnal Penutup</h5>
                 </div>
                 <div class="card-body">
-                    <div class="alert alert-info">
-                        <h6><i class="fas fa-info-circle me-2"></i>Proses Penutupan</h6>
-                        <p class="mb-0">
-                            Jurnal penutup digunakan untuk menutup akun nominal (pendapatan dan beban) 
-                            ke akun Laba Ditahan pada akhir periode akuntansi.
-                        </p>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <strong>Laba/Rugi Bersih Periode:</strong>
-                        <span class="{'text-success' if net_income >= 0 else 'text-danger'} fw-bold ms-2">
-                            Rp {net_income:,.2f}
-                        </span>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <strong>Jumlah Entri Penutup:</strong>
-                        <span class="fw-bold ms-2">{len(closing_entries_list)} entri</span>
-                    </div>
-                    
-                    {f'<div class="alert alert-success"><i class="fas fa-check-circle me-2"></i>Tidak ada entri penutup yang diperlukan. Saldo sudah nol.</div>' if not closing_entries_list else ''}
-                    
-                    <div class="mt-4">
-                        <form method="post" action="/closing/post">
-                            <button type="submit" class="btn btn-primary" {'disabled' if not closing_entries_list else ''}>
-                                <i class="fas fa-lock me-2"></i>Posting Jurnal Penutup
-                            </button>
-                            <a href="/financials" class="btn btn-outline-secondary">
-                                <i class="fas fa-chart-line me-2"></i>Lihat Laporan Keuangan
-                            </a>
-                        </form>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <div class="col-lg-6">
-            <div class="card">
-                <div class="card-header bg-success text-white">
-                    <h5 class="mb-0"><i class="fas fa-balance-scale me-2"></i>Neraca Saldo Setelah Penutupan</h5>
-                </div>
-                <div class="card-body">
-                    <div class="alert alert-success">
-                        <h6><i class="fas fa-check-circle me-2"></i>Neraca Saldo Penutup</h6>
-                        <p class="mb-0">
-                            Neraca saldo setelah penutupan hanya berisi akun riil (Aset, Kewajiban, Ekuitas) 
-                            yang akan menjadi saldo awal periode berikutnya.
-                        </p>
-                    </div>
-                    
+    """
+
+    if closing_entries_list:
+        body += """
                     <div class="table-responsive">
                         <table class="table table-sm accounting-table">
                             <thead>
                                 <tr>
-                                    <th>Akun</th>
-                                    <th class="text-end">Debit</th>
-                                    <th class="text-end">Kredit</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-    """
-    
-    for item in pctb_data:
-        if item['debit'] != 0 or item['credit'] != 0:
-            debit_display = f"Rp {item['debit']:,.2f}" if item['debit'] > 0 else ""
-            credit_display = f"Rp {item['credit']:,.2f}" if item['credit'] > 0 else ""
-            
-            body += f"""
-                                <tr>
-                                    <td>
-                                        <small><strong>{item['account']['code']}</strong> {item['account']['name']}</small>
-                                    </td>
-                                    <td class="text-end text-success">{debit_display}</td>
-                                    <td class="text-end text-danger">{credit_display}</td>
-                                </tr>
-            """
-    
-    body += f"""
-                            </tbody>
-                            <tfoot class="table-active">
-                                <tr>
-                                    <th>Total</th>
-                                    <th class="text-end text-success">Rp {pctb_debit:,.2f}</th>
-                                    <th class="text-end text-danger">Rp {pctb_credit:,.2f}</th>
-                                </tr>
-                            </tfoot>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Detail Jurnal Penutup -->
-    <div class="row mt-4">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0"><i class="fas fa-list me-2"></i>Detail Entri Penutup</h5>
-                </div>
-                <div class="card-body">
-    """
-    
-    if closing_entries_list:
-        body += """
-                    <div class="table-responsive">
-                        <table class="table accounting-table">
-                            <thead>
-                                <tr>
-                                    <th>Akun</th>
-                                    <th class="text-end">Debit</th>
-                                    <th class="text-end">Kredit</th>
+                                    <th>Tanggal</th>
                                     <th>Keterangan</th>
+                                    <th class="text-end">Debit</th>
+                                    <th class="text-end">Kredit</th>
                                 </tr>
                             </thead>
                             <tbody>
         """
-        
+
+        total_debit = 0
+        total_credit = 0
+        closing_date = datetime.now().date().isoformat()
+
         for entry in closing_entries_list:
-            cur = get_db().execute('SELECT code, name FROM accounts WHERE id = ?', (entry['account_id'],))
+            cur = get_db().execute(
+                "SELECT code, name FROM accounts WHERE id = ?",
+                (entry["account_id"],),
+            )
             account = cur.fetchone()
-            
-            debit_display = f"Rp {entry['debit']:,.2f}" if entry['debit'] > 0 else ""
-            credit_display = f"Rp {entry['credit']:,.2f}" if entry['credit'] > 0 else ""
-            
+
+            debit = float(entry["debit"] or 0)
+            credit = float(entry["credit"] or 0)
+            total_debit += debit
+            total_credit += credit
+
+            keterangan = f"{account['code']} - {account['name']}"
+            if entry.get("description"):
+                keterangan += f" ({entry['description']})"
+
             body += f"""
                                 <tr>
-                                    <td>
-                                        <strong>{account['code']}</strong> {account['name']}
-                                    </td>
-                                    <td class="text-end text-success">{debit_display}</td>
-                                    <td class="text-end text-danger">{credit_display}</td>
-                                    <td>{entry['description']}</td>
+                                    <td>{closing_date}</td>
+                                    <td>{keterangan}</td>
+                                    <td class="text-end">{'Rp {:,}'.format(int(debit)) if debit else ''}</td>
+                                    <td class="text-end">{'Rp {:,}'.format(int(credit)) if credit else ''}</td>
                                 </tr>
             """
-        
-        body += """
+
+        body += f"""
                             </tbody>
+                            <tfoot class="table-active">
+                                <tr>
+                                    <th colspan="2" class="text-end">Total</th>
+                                    <th class="text-end">Rp {total_debit:,}</th>
+                                    <th class="text-end">Rp {total_credit:,}</th>
+                                </tr>
+                            </tfoot>
                         </table>
+                        <div class="alert alert-info mt-2 mb-0">
+                            Laba / Rugi Bersih periode ini: <strong>Rp {net_income:,}</strong>
+                        </div>
                     </div>
         """
     else:
         body += """
                     <div class="text-center py-4">
                         <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
-                        <h5 class="text-success">Tidak Ada Entri Penutup</h5>
-                        <p class="text-muted">Semua akun nominal sudah dalam kondisi tertutup.</p>
+                        <h5 class="text-success">Tidak ada akun nominal yang perlu ditutup.</h5>
                     </div>
         """
-    
+
     body += """
+                </div>
+            </div>
+        </div>
+
+        <!-- KANAN: Neraca Saldo Penutup -->
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="fas fa-balance-scale me-2"></i>Neraca Saldo Penutup</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm accounting-table">
+                            <thead>
+                                <tr>
+                                    <th>Kode Akun</th>
+                                    <th>Nama Akun</th>
+                                    <th class="text-end">Debit</th>
+                                    <th class="text-end">Kredit</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+    """
+
+    for item in pctb_data:
+        if item["debit"] == 0 and item["credit"] == 0:
+            continue
+
+        acc = item["account"]
+        debit = float(item["debit"] or 0)
+        credit = float(item["credit"] or 0)
+
+        body += f"""
+                                <tr>
+                                    <td>{acc['code']}</td>
+                                    <td>{acc['name']}</td>
+                                    <td class="text-end">{'Rp {:,}'.format(int(debit)) if debit else ''}</td>
+                                    <td class="text-end">{'Rp {:,}'.format(int(credit)) if credit else ''}</td>
+                                </tr>
+        """
+
+    body += f"""
+                            </tbody>
+                            <tfoot class="table-active">
+                                <tr>
+                                    <th colspan="2" class="text-end">TOTAL</th>
+                                    <th class="text-end">Rp {pctb_debit:,}</th>
+                                    <th class="text-end">Rp {pctb_credit:,}</th>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                    <p class="text-muted mb-0">
+                        Neraca saldo penutup ini menjadi <strong>saldo awal periode berikutnya</strong>.
+                    </p>
                 </div>
             </div>
         </div>
     </div>
     """
-    
-    return render_template_string(BASE_TEMPLATE, title='Jurnal Penutup', body=body, user=current_user())
 
-@app.route('/closing/post', methods=['POST'])
+    return render_template_string(
+        BASE_TEMPLATE,
+        title="Jurnal Penutup",
+        body=body,
+        user=current_user(),
+    )
+
+@app.route('/auto_closing')
 @login_required
-def post_closing_entries_route():
-    """Posting jurnal penutup"""
-    try:
-        entry_id, net_income = post_closing_entries()
-        
-        if entry_id:
-            flash(f'✅ Jurnal penutup berhasil diposting! Laba/Rugi bersih: IDR {net_income:,.2f}')
-        else:
-            flash('ℹ️ Tidak ada entri penutup yang perlu diposting.')
-        
-        return redirect(url_for('closing_entries'))
-        
-    except Exception as e:
-        flash(f'❌ Error posting jurnal penutup: {str(e)}')
-        return redirect(url_for('closing_entries'))
+def auto_closing():
+    entries = generate_closing_entries()
+    post_closing_entries(entries)
+    flash("Jurnal penutup berhasil dibuat otomatis!")
+    return redirect('/closing')
+
 
 # ---------- Export Financial Reports ----------
 
@@ -7583,6 +7365,10 @@ def verify_balances():
     """
     
     return render_template_string(BASE_TEMPLATE, title='Verifikasi Saldo', body=body, user=current_user())
+
+
+
+
 
 
 
