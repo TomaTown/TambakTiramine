@@ -5988,170 +5988,202 @@ def opening_balance():
 @login_required
 def closing_entries():
     """Halaman jurnal penutup dan neraca saldo penutup"""
-
-    # Hitung jurnal penutup (belum tentu sudah diposting)
+    
+    # Dapatkan entri penutup yang akan diposting
     closing_entries_list, net_income = get_closing_entries()
-
-    # Kalau mau sekalian AUTO-POST begitu dibuka, biarkan baris ini.
-    # Kalau maunya manual (pakai tombol), hapus 3 baris di bawah.
-    if closing_entries_list:
-        post_closing_entries()
-
-    # Neraca saldo penutup (setelah penyesuaian + penutup)
+    
+    # Dapatkan neraca saldo penutup
     pctb_data, pctb_debit, pctb_credit = get_post_closing_trial_balance()
-
+    
     body = f"""
     <div class="page-header">
         <h1 class="page-title">Jurnal Penutup & Neraca Saldo Penutup</h1>
-        <p class="page-subtitle">Format mirip dengan template Excel yang kamu buat.</p>
+        <p class="page-subtitle">Proses penutupan periode akuntansi</p>
     </div>
-
+    
     <div class="row">
-        <!-- KIRI: Jurnal Penutup -->
         <div class="col-lg-6">
             <div class="card">
                 <div class="card-header bg-warning text-dark">
-                    <h5 class="mb-0"><i class="fas fa-book me-2"></i>Jurnal Penutup</h5>
+                    <h5 class="mb-0"><i class="fas fa-lock me-2"></i>Jurnal Penutup</h5>
                 </div>
                 <div class="card-body">
-    """
-
-    if closing_entries_list:
-        body += """
+                    <div class="alert alert-info">
+                        <h6><i class="fas fa-info-circle me-2"></i>Proses Penutupan</h6>
+                        <p class="mb-0">
+                            Jurnal penutup digunakan untuk menutup akun nominal (pendapatan dan beban) 
+                            ke akun Laba Ditahan pada akhir periode akuntansi.
+                        </p>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <strong>Laba/Rugi Bersih Periode:</strong>
+                        <span class="{'text-success' if net_income >= 0 else 'text-danger'} fw-bold ms-2">
+                            Rp {net_income:,.2f}
+                        </span>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <strong>Jumlah Entri Penutup:</strong>
+                        <span class="fw-bold ms-2">{len(closing_entries_list)} entri</span>
+                    </div>
+                    
+                    {f'<div class="alert alert-success"><i class="fas fa-check-circle me-2"></i>Tidak ada entri penutup yang diperlukan. Saldo sudah nol.</div>' if not closing_entries_list else ''}
+                    
+                    <div class="mt-4">
+                        <form method="post" action="/closing/post">
+                            <button type="submit" class="btn btn-primary" {'disabled' if not closing_entries_list else ''}>
+                                <i class="fas fa-lock me-2"></i>Posting Jurnal Penutup
+                            </button>
+                            <a href="/financials" class="btn btn-outline-secondary">
+                                <i class="fas fa-chart-line me-2"></i>Lihat Laporan Keuangan
+                            </a>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="fas fa-balance-scale me-2"></i>Neraca Saldo Setelah Penutupan</h5>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-success">
+                        <h6><i class="fas fa-check-circle me-2"></i>Neraca Saldo Penutup</h6>
+                        <p class="mb-0">
+                            Neraca saldo setelah penutupan hanya berisi akun riil (Aset, Kewajiban, Ekuitas) 
+                            yang akan menjadi saldo awal periode berikutnya.
+                        </p>
+                    </div>
+                    
                     <div class="table-responsive">
                         <table class="table table-sm accounting-table">
                             <thead>
                                 <tr>
-                                    <th>Tanggal</th>
-                                    <th>Keterangan</th>
+                                    <th>Akun</th>
                                     <th class="text-end">Debit</th>
                                     <th class="text-end">Kredit</th>
                                 </tr>
                             </thead>
                             <tbody>
-        """
-
-        total_debit = 0
-        total_credit = 0
-        closing_date = datetime.now().date().isoformat()
-
-        for entry in closing_entries_list:
-            cur = get_db().execute(
-                "SELECT code, name FROM accounts WHERE id = ?",
-                (entry["account_id"],),
-            )
-            account = cur.fetchone()
-
-            debit = float(entry["debit"] or 0)
-            credit = float(entry["credit"] or 0)
-            total_debit += debit
-            total_credit += credit
-
-            keterangan = f"{account['code']} - {account['name']}"
-            if entry.get("description"):
-                keterangan += f" ({entry['description']})"
-
+    """
+    
+    for item in pctb_data:
+        if item['debit'] != 0 or item['credit'] != 0:
+            debit_display = f"Rp {item['debit']:,.2f}" if item['debit'] > 0 else ""
+            credit_display = f"Rp {item['credit']:,.2f}" if item['credit'] > 0 else ""
+            
             body += f"""
                                 <tr>
-                                    <td>{closing_date}</td>
-                                    <td>{keterangan}</td>
-                                    <td class="text-end">{'Rp {:,}'.format(int(debit)) if debit else ''}</td>
-                                    <td class="text-end">{'Rp {:,}'.format(int(credit)) if credit else ''}</td>
+                                    <td>
+                                        <small><strong>{item['account']['code']}</strong> {item['account']['name']}</small>
+                                    </td>
+                                    <td class="text-end text-success">{debit_display}</td>
+                                    <td class="text-end text-danger">{credit_display}</td>
                                 </tr>
             """
-
-        body += f"""
+    
+    body += f"""
                             </tbody>
                             <tfoot class="table-active">
                                 <tr>
-                                    <th colspan="2" class="text-end">Total</th>
-                                    <th class="text-end">Rp {total_debit:,}</th>
-                                    <th class="text-end">Rp {total_credit:,}</th>
+                                    <th>Total</th>
+                                    <th class="text-end text-success">Rp {pctb_debit:,.2f}</th>
+                                    <th class="text-end text-danger">Rp {pctb_credit:,.2f}</th>
                                 </tr>
                             </tfoot>
                         </table>
-                        <div class="alert alert-info mt-2 mb-0">
-                            Laba / Rugi Bersih periode ini: <strong>Rp {net_income:,}</strong>
-                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Detail Jurnal Penutup -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-list me-2"></i>Detail Entri Penutup</h5>
+                </div>
+                <div class="card-body">
+    """
+    
+    if closing_entries_list:
+        body += """
+                    <div class="table-responsive">
+                        <table class="table accounting-table">
+                            <thead>
+                                <tr>
+                                    <th>Akun</th>
+                                    <th class="text-end">Debit</th>
+                                    <th class="text-end">Kredit</th>
+                                    <th>Keterangan</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+        """
+        
+        for entry in closing_entries_list:
+            cur = get_db().execute('SELECT code, name FROM accounts WHERE id = ?', (entry['account_id'],))
+            account = cur.fetchone()
+            
+            debit_display = f"Rp {entry['debit']:,.2f}" if entry['debit'] > 0 else ""
+            credit_display = f"Rp {entry['credit']:,.2f}" if entry['credit'] > 0 else ""
+            
+            body += f"""
+                                <tr>
+                                    <td>
+                                        <strong>{account['code']}</strong> {account['name']}
+                                    </td>
+                                    <td class="text-end text-success">{debit_display}</td>
+                                    <td class="text-end text-danger">{credit_display}</td>
+                                    <td>{entry['description']}</td>
+                                </tr>
+            """
+        
+        body += """
+                            </tbody>
+                        </table>
                     </div>
         """
     else:
         body += """
                     <div class="text-center py-4">
                         <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
-                        <h5 class="text-success">Tidak ada akun nominal yang perlu ditutup.</h5>
+                        <h5 class="text-success">Tidak Ada Entri Penutup</h5>
+                        <p class="text-muted">Semua akun nominal sudah dalam kondisi tertutup.</p>
                     </div>
         """
-
+    
     body += """
-                </div>
-            </div>
-        </div>
-
-        <!-- KANAN: Neraca Saldo Penutup -->
-        <div class="col-lg-6">
-            <div class="card">
-                <div class="card-header bg-success text-white">
-                    <h5 class="mb-0"><i class="fas fa-balance-scale me-2"></i>Neraca Saldo Penutup</h5>
-                </div>
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table table-sm accounting-table">
-                            <thead>
-                                <tr>
-                                    <th>Kode Akun</th>
-                                    <th>Nama Akun</th>
-                                    <th class="text-end">Debit</th>
-                                    <th class="text-end">Kredit</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-    """
-
-    for item in pctb_data:
-        if item["debit"] == 0 and item["credit"] == 0:
-            continue
-
-        acc = item["account"]
-        debit = float(item["debit"] or 0)
-        credit = float(item["credit"] or 0)
-
-        body += f"""
-                                <tr>
-                                    <td>{acc['code']}</td>
-                                    <td>{acc['name']}</td>
-                                    <td class="text-end">{'Rp {:,}'.format(int(debit)) if debit else ''}</td>
-                                    <td class="text-end">{'Rp {:,}'.format(int(credit)) if credit else ''}</td>
-                                </tr>
-        """
-
-    body += f"""
-                            </tbody>
-                            <tfoot class="table-active">
-                                <tr>
-                                    <th colspan="2" class="text-end">TOTAL</th>
-                                    <th class="text-end">Rp {pctb_debit:,}</th>
-                                    <th class="text-end">Rp {pctb_credit:,}</th>
-                                </tr>
-                            </tfoot>
-                        </table>
-                    </div>
-                    <p class="text-muted mb-0">
-                        Neraca saldo penutup ini menjadi <strong>saldo awal periode berikutnya</strong>.
-                    </p>
                 </div>
             </div>
         </div>
     </div>
     """
+    
+    return render_template_string(BASE_TEMPLATE, title='Jurnal Penutup', body=body, user=current_user())
 
-    return render_template_string(
-        BASE_TEMPLATE,
-        title="Jurnal Penutup",
-        body=body,
-        user=current_user(),
-    )
-
+@app.route('/closing/post', methods=['POST'])
+@login_required
+def post_closing_entries_route():
+    """Posting jurnal penutup"""
+    try:
+        entry_id, net_income = post_closing_entries()
+        
+        if entry_id:
+            flash(f'✅ Jurnal penutup berhasil diposting! Laba/Rugi bersih: IDR {net_income:,.2f}')
+        else:
+            flash('ℹ️ Tidak ada entri penutup yang perlu diposting.')
+        
+        return redirect(url_for('closing_entries'))
+        
+    except Exception as e:
+        flash(f'❌ Error posting jurnal penutup: {str(e)}')
+        return redirect(url_for('closing_entries'))
 
 # ---------- Export Financial Reports ----------
 
@@ -7689,6 +7721,7 @@ def verify_balances():
     """
     
     return render_template_string(BASE_TEMPLATE, title='Verifikasi Saldo', body=body, user=current_user())
+
 
 
 
