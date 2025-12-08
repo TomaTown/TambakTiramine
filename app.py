@@ -822,6 +822,66 @@ def get_account_id(cur, code):
     result = cur.fetchone()
     return result["id"] if result else None
 
+def fix_opening_balances():
+    """Memperbaiki saldo awal agar sesuai dengan prinsip akuntansi"""
+    db = get_db()
+    cur = db.cursor()
+    
+    # Hapus semua saldo awal yang ada
+    cur.execute('DELETE FROM opening_balances')
+    
+    # DATA SALDO AWAL YANG BENAR - SESUAI DENGAN NERACA SALDO AWAL
+    # Total harus balance: Debit = Credit = Rp 31.550.000
+    opening_balances_corrected = [
+        # ===== ASET (DEBIT) =====
+        (1, 8500000, 0),     # Kas (101) - Debit
+        (2, 4500000, 0),     # Piutang Usaha (102) - Debit
+        (3, 500000, 0),      # Peralatan Tambak (103) - Debit
+        (4, 300000, 0),      # Perlengkapan (104) - Debit
+        (5, 1200000, 0),     # Persediaan - Tiram Kecil (105) - Debit
+        (6, 1750000, 0),     # Persediaan - Tiram Besar (106) - Debit
+        (7, 12000000, 0),    # Kendaraan (107) - Debit
+        
+        # ===== KONTRA ASET (CREDIT) =====
+        (8, 0, 1500000),     # Akumulasi Penyusutan Kendaraan (108) - Credit
+        
+        # ===== KEWAJIBAN (CREDIT) =====
+        (9, 0, 650000),      # Utang Usaha (201) - Credit
+        (10, 0, 100000),     # Utang Gaji (202) - Credit
+        
+        # ===== EKUITAS (CREDIT) =====
+        (11, 0, 22300000),   # Modal Pemilik (301) - Credit
+        
+        # ===== PENDAPATAN (CREDIT) =====
+        (12, 0, 4000000),    # Penjualan - Tiram Besar (401) - Credit
+        (13, 0, 3000000),    # Penjualan - Tiram Kecil (402) - Credit
+        
+        # ===== BEBAN (DEBIT) =====
+        (14, 1000000, 0),    # HPP - Tiram Kecil (501) - Debit
+        (15, 1500000, 0),    # HPP - Tiram Besar (502) - Debit
+        (16, 300000, 0),     # Beban Gaji (503) - Debit
+    ]
+    
+    # Insert saldo awal yang sudah dikoreksi
+    for account_id, debit_amount, credit_amount in opening_balances_corrected:
+        cur.execute('''
+            INSERT INTO opening_balances (account_id, debit_amount, credit_amount) 
+            VALUES (?, ?, ?)
+        ''', (account_id, debit_amount, credit_amount))
+    
+    # Hitung total untuk verifikasi
+    total_debit = sum(balance[1] for balance in opening_balances_corrected)
+    total_credit = sum(balance[2] for balance in opening_balances_corrected)
+    
+    print(f"✅ SALDO AWAL DIPERBAIKI:")
+    print(f"📊 TOTAL DEBIT: {total_debit:,}")
+    print(f"📊 TOTAL CREDIT: {total_credit:,}")
+    print(f"📊 BALANCED: {total_debit == total_credit}")
+    print(f"📊 SELISIH: {abs(total_debit - total_credit):,}")
+    
+    db.commit()
+    return total_debit == total_credit
+
 def set_opening_balance(account_id, balance, balance_type):
     """Set saldo awal untuk akun tertentu"""
     db = get_db()
@@ -3612,16 +3672,10 @@ def login():
         user=None
     )
 
-
 @app.route('/login/google')
 def login_google():
-    # kalau jalan di domain production, paksa pakai https
-    if request.host.startswith("tiramine.my.id"):
-        redirect_uri = url_for('google_callback', _external=True, _scheme='https')
-    else:
-        # untuk lokal (127.0.0.1:5000) tetap pakai skema default (http)
-        redirect_uri = url_for('google_callback', _external=True)
-
+    # URL callback: /auth/google/callback
+    redirect_uri = url_for('google_callback', _external=True)
     return google.authorize_redirect(redirect_uri)
 
 
@@ -7799,6 +7853,26 @@ def verify_balances():
     """
     
     return render_template_string(BASE_TEMPLATE, title='Verifikasi Saldo', body=body, user=current_user())
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
