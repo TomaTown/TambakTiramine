@@ -1,7 +1,10 @@
-Flask
+flask
 bcrypt
 pandas
-XlsxWriter
+xlsxwriter
 psycopg2-binary
 python-dotenv
 gunicorn
+authlib
+Flask-SQLAlchemy
+requests
