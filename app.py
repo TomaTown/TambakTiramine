@@ -1295,30 +1295,22 @@ def trial_balance(include_adjustments=False):
     trial_balance_data = []
     total_debit = 0
     total_credit = 0
-    
+
     for account in accounts:
-        # Dapatkan saldo akun
         balance = get_account_balance(account['id'], include_adjustments)
         
-        # Tentukan apakah saldo normalnya Debit atau Kredit
-        if account['normal_balance'] == 'Debit':
-            # Untuk akun dengan saldo normal Debit (Asset, Expense)
-            if balance >= 0:
-                debit = balance
-                credit = 0
-            else:
-                debit = 0
-                credit = abs(balance)
-        else:
-            # Untuk akun dengan saldo normal Kredit (Liability, Equity, Revenue)
-            if balance >= 0:
-                debit = 0
-                credit = balance
-            else:
-                debit = abs(balance)
-                credit = 0
+        # saldo > 0 artinya: debit > kredit
+        # saldo < 0 artinya: kredit > debit
         
-        # Hanya tampilkan akun yang memiliki saldo
+        if account['normal_balance'] == 'Debit':
+            # Akun debit normal (Aset, Beban)
+            debit = balance if balance > 0 else 0
+            credit = -balance if balance < 0 else 0
+        else:
+            # Akun kredit normal (Utang, Modal, Pendapatan, Contra Asset)
+            credit = -balance if balance < 0 else 0
+            debit = balance if balance > 0 else 0
+
         if debit != 0 or credit != 0:
             trial_balance_data.append({
                 'account': account,
@@ -1327,8 +1319,9 @@ def trial_balance(include_adjustments=False):
             })
             total_debit += debit
             total_credit += credit
-    
+
     return trial_balance_data, total_debit, total_credit
+
 
 def equity_statement(include_adjustments=True):
     """Hasilkan laporan perubahan modal"""
@@ -7721,6 +7714,7 @@ def verify_balances():
     """
     
     return render_template_string(BASE_TEMPLATE, title='Verifikasi Saldo', body=body, user=current_user())
+
 
 
 
